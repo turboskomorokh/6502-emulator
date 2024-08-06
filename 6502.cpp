@@ -23,7 +23,7 @@ struct Memory {
   printf("\nMemory dump 0x%04x-0x%04x:\n", addr, end);
   while (addr != end || addr > MAX_MEM) {
    printf("0x%04x: ", addr);
-   for (int i = 0; i < PRINT_ROW_SIZE && addr != end; i++) {
+   for (int i = 0; i < PRINT_ROW_SIZE; i++) {
     printf("0x%02X ", Data[addr]);
     addr++;
    }
@@ -492,7 +492,7 @@ struct CPU_6502 {
  // BCC
  void BCC(uint32_t& Cycles, Byte Offset) {
   if (!C) {
-   Word targetAddress = (PC + static_cast<int8_t>(Offset)) & 0xFFFF;
+   Word targetAddress = (PC + Offset) & 0xFFFF;
    if ((PC & 0xFF00) != (targetAddress & 0xFF00)) {
     EatCycles(Cycles, 2);
    }
@@ -505,7 +505,7 @@ struct CPU_6502 {
  // BCS
  void BCS(uint32_t& Cycles, Byte Offset) {
   if (C) {
-   Word targetAddress = (PC + static_cast<int8_t>(Offset)) & 0xFFFF;
+   Word targetAddress = (PC + Offset) & 0xFFFF;
    if ((PC & 0xFF00) != (targetAddress & 0xFF00)) {
     EatCycles(Cycles, 2);
    }
@@ -518,7 +518,7 @@ struct CPU_6502 {
  // BEQ
  void BEQ(uint32_t& Cycles, Byte Offset) {
   if (Z) {
-   Word targetAddress = (PC + static_cast<int8_t>(Offset)) & 0xFFFF;
+   Word targetAddress = (PC + Offset) & 0xFFFF;
    if ((PC & 0xFF00) != (targetAddress & 0xFF00)) {
     EatCycles(Cycles, 2);
    }
@@ -540,7 +540,7 @@ struct CPU_6502 {
  // BMI
  void BMI(uint32_t& Cycles, Byte Offset) {
   if (N) {
-   Word targetAddress = (PC + static_cast<int8_t>(Offset)) & 0xFFFF;
+   Word targetAddress = (PC + Offset) & 0xFFFF;
    if ((PC & 0xFF00) != (targetAddress & 0xFF00)) {
     EatCycles(Cycles, 2);
    }
@@ -553,7 +553,7 @@ struct CPU_6502 {
  // BNE
  void BNE(uint32_t& Cycles, Byte Offset) {
   if (!Z) {
-   Word targetAddress = (PC + static_cast<int8_t>(Offset)) & 0xFFFF;
+   Word targetAddress = (PC + Offset) & 0xFFFF;
    if ((PC & 0xFF00) != (targetAddress & 0xFF00)) {
     EatCycles(Cycles, 2);
    }
@@ -566,7 +566,7 @@ struct CPU_6502 {
  // BPL
  void BPL(uint32_t& Cycles, Byte Offset) {
   if (!N) {
-   Word targetAddress = (PC + static_cast<int8_t>(Offset)) & 0xFFFF;
+   Word targetAddress = (PC + Offset) & 0xFFFF;
    if ((PC & 0xFF00) != (targetAddress & 0xFF00)) {
     EatCycles(Cycles, 2);
    }
@@ -588,7 +588,7 @@ struct CPU_6502 {
  // BVC
  void BVC(uint32_t& Cycles, Byte Offset) {
   if (!O) {
-   Word targetAddress = (PC + static_cast<int8_t>(Offset)) & 0xFFFF;
+   Word targetAddress = (PC + Offset) & 0xFFFF;
    if ((PC & 0xFF00) != (targetAddress & 0xFF00)) {
     EatCycles(Cycles, 2);
    }
@@ -601,7 +601,7 @@ struct CPU_6502 {
  // BVS
  void BVS(uint32_t& Cycles, Byte Offset) {
   if (O) {
-   Word targetAddress = (PC + static_cast<int8_t>(Offset)) & 0xFFFF;
+   Word targetAddress = (PC + Offset) & 0xFFFF;
    if ((PC & 0xFF00) != (targetAddress & 0xFF00)) {
     EatCycles(Cycles, 2);
    }
@@ -806,7 +806,7 @@ struct CPU_6502 {
    // BCC Relative
    case INS_BCC_REL: {
     Byte Offset = FetchByte(Cycles, memory); // 1 cycle
-    BCC(Cycles, Offset); // 
+    BCC(Cycles, Offset); // 1 cycle
     printf("Handled INS_BCC_REL\n");
    } break;
 
@@ -855,12 +855,11 @@ int main() {
  cpu.Reset(mem, 0x0);
  mem[0x0] = CPU_6502::INS_BCC_REL;
  mem[0x0001] = 0x55;
- mem[0x0002] = CPU_6502::INS_ASL_ZP;
- mem[0x0003] = 0x04;
- mem[0x0004] = 0x04;
+ mem[0x0055] = CPU_6502::INS_JMP_AB;
 
- cpu.Execute(5, mem);
- mem.PrintRange(0x0, 0x050);
+
+ cpu.Execute(15, mem);
+ mem.PrintRange(0x0000, 0x0100);
  cpu.PrintFlags();
  cpu.PrintRegisters();
  return 0;
