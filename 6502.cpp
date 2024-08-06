@@ -23,7 +23,7 @@ struct Memory {
   printf("\nMemory dump 0x%04x-0x%04x:\n", addr, end);
   while (addr != end || addr > MAX_MEM) {
    printf("0x%04x: ", addr);
-   for (int i = 0; i < PRINT_ROW_SIZE && addr < end; i++) {
+   for (int i = 0; i < PRINT_ROW_SIZE && addr != end; i++) {
     printf("0x%02X ", Data[addr]);
     addr++;
    }
@@ -269,7 +269,7 @@ struct CPU_6502 {
  };
 
  void PrintFlags() {
-  printf("CPU Flags:\n"
+  printf("\nCPU Flags:\n"
          "Carry     (C): 0x%02x\n"
          "Zero      (Z): 0x%02x\n"
          "Interrupt (I): 0x%02x\n"
@@ -278,6 +278,14 @@ struct CPU_6502 {
          "Overflow  (O): 0x%02x\n"
          "Negative  (N): 0x%02x\n",
       C, Z, I, D, B, O, N);
+ }
+
+ void PrintRegisters() {
+  printf("\nCPU Registers:\n"
+         "A: 0x%02x\n"
+         "X: 0x%02x\n"
+         "Y: 0x%02x\n",
+      A, X, Y);
  }
 
  void Reset(Memory& mem, Word ResetAddress = 0xFFFC /* Something about debug purposes */) {
@@ -289,11 +297,52 @@ struct CPU_6502 {
   mem.Init();
  }
 
+ Byte GetProcessorStatus() {
+  Byte Status = 0;
+  Status |= (C ? 0x01 : 0x00);
+  Status |= (Z ? 0x02 : 0x00);
+  Status |= (I ? 0x04 : 0x00);
+  Status |= (D ? 0x08 : 0x00);
+  Status |= (B ? 0x10 : 0x00);
+  Status |= (O ? 0x40 : 0x00);
+  Status |= (N ? 0x80 : 0x00);
+  return Status;
+ }
+
  void EatCycles(uint32_t& Cycles, uint32_t amount /* amount of cycles to consume */) {
   if (Cycles >= amount)
    Cycles -= amount;
   else
    Cycles = 0;
+ }
+
+ // Does 1 cycle
+ void StackPushByte(uint32_t& Cycles, Memory& memory, Byte Value) {
+  memory[SP] = Value;
+  SP--;
+  EatCycles(Cycles, 1);
+ }
+
+ // Does 2 cycles
+ void StackPushWord(uint32_t& Cycles, Memory& memory, Word Value) {
+  StackPushByte(Cycles, memory, Value);
+  StackPushByte(Cycles, memory, Value >> 8);
+ }
+
+ // Does 1 cycle
+ Byte StackPullByte(uint32_t& Cycles, Memory& memory) {
+  Byte Value = memory[SP];
+  SP++;
+  EatCycles(Cycles, 1);
+  return Value;
+ }
+
+ // Does 2 cycles
+ Word StackPullWord(uint32_t& Cycles, Memory& memory) {
+  Byte hi = StackPullByte(Cycles, memory);
+  Byte lo = StackPullByte(Cycles, memory);
+  Word Value = (hi << 8) | lo;
+  return Value;
  }
 
  // Does 1 cycle
@@ -342,49 +391,67 @@ struct CPU_6502 {
   return ZeroPageAddress;
  }
 
- // Does 2 cycles
- Word GetAbsoluteAddress(uint32_t Cycles, Memory& memory, Byte Offset = 0x00) {
-  Word AbsoluteAddress = FetchWord(Cycles, memory); // 2 cycles
-  AbsoluteAddress += Offset;
-  return AbsoluteAddress;
+ // Does 2 cycles, 3 on page crossing
+ Word GetAbsoluteAddress(uint32_t& Cycles, Memory& memory, Byte Offset = 0x00) {
+  Word BaseAddress = FetchWord(Cycles, memory); // 2 cycles
+  Word EffectiveAddress = BaseAddress + Offset;
+
+  // check page crossing
+  if (((BaseAddress & 0xFF00) != (EffectiveAddress & 0xFF00))) {
+   EatCycles(Cycles, 1); // 1 cycle
+  }
+
+  return EffectiveAddress;
  }
 
  // Does 2 cycles, 3 on offset
  Byte GetZeroPageAddressValue(uint32_t& Cycles, Memory& memory, Byte Offset = 0x00) {
-  Byte ZeroPageAddress = GetZeroPageAddress(Cycles, memory);
+  Byte ZeroPageAddress = GetZeroPageAddress(Cycles, memory, Offset);
   Byte Value = ReadByte(Cycles, ZeroPageAddress, memory); // 1 cycle
   return Value;
  }
 
- // Does 3 cycles
+ // Does 3 cycles, 4 on page crossing
  Byte GetAbsoluteAddressValue(uint32_t& Cycles, Memory& memory, Byte Offset = 0x00) {
-  Word AbsoluteAddress = GetAbsoluteAddress(Cycles, memory);
-  Byte Value = ReadByte(Cycles, AbsoluteAddress, memory); // 1 cycle
+  Word BaseAddress = GetAbsoluteAddress(Cycles, memory); // 2 cycles
+  Word EffectiveAddress = (BaseAddress + Offset) & 0xFFFF;
+
+  if (((BaseAddress & 0xFF00) != (EffectiveAddress & 0xFF00))) {
+   EatCycles(Cycles, 1);
+  }
+
+  Byte Value = ReadByte(Cycles, EffectiveAddress, memory); // Читаем значение из памяти
   return Value;
  }
 
  // Does 4 cycles
  Byte GetIndirectAddressValueX(uint32_t& Cycles, Memory& memory) {
   Byte ZeroPageAddress = FetchByte(Cycles, memory); // 1 cycle
-  Word IndirectAddress = ZeroPageAddress + X;
+  Word IndirectAddress = (ZeroPageAddress + X) & 0xFF;
 
   Word EffectiveAddress = ReadWord(Cycles, IndirectAddress, memory); // 2 cycles
   Byte Value = ReadByte(Cycles, EffectiveAddress, memory); // 1 cycle
   return Value;
  }
 
- // Does 4 cycles
+ // Does 4 cycles, 5 on page crossing
  Byte GetIndirectAddressValueY(uint32_t& Cycles, Memory& memory) {
   Byte ZeroPageAddress = FetchByte(Cycles, memory); // 1 cycle
+  Word IndirectAddress = ReadWord(Cycles, ZeroPageAddress, memory); // 2 cycles
+  Word EffectiveAddress = IndirectAddress + Y;
 
-  Word EffectiveAddress = ReadWord(Cycles, ZeroPageAddress, memory); // 2 cycles
-  Byte Value = ReadByte(Cycles, EffectiveAddress + Y, memory); // 1 cycle
+  // check page crossing
+  if (((IndirectAddress & 0xFF00) != (EffectiveAddress & 0xFF00))) {
+   EatCycles(Cycles, 1); // 1 cycle
+  }
+
+  Byte Value = ReadByte(Cycles, EffectiveAddress, memory); // 1 cycle
   return Value;
  }
 
  void WriteValueToAddress(uint32_t Cycles, Memory& memory, Word Address, Byte Value) {
   memory[Address] = Value;
-  EatCycles(Cycles, 1);
+  EatCycles(Cycles, 1); // 1 cycle
  }
 
  // void LDA(uint32_t &Cycles, Byte Value) {
@@ -393,6 +460,7 @@ struct CPU_6502 {
  //   N = (A & 0b10000000) != 0;
  // }
 
+ // ADC
  void ADC(uint32_t& Cycles, Byte Value) {
   Word Sum = (Word)A + (Word)Value + (Word)C;
 
@@ -404,6 +472,7 @@ struct CPU_6502 {
   EatCycles(Cycles, 1);
  }
 
+ // AND
  void AND(uint32_t& Cycles, Byte Value) {
   A &= Value;
   Z = (A == 0);
@@ -411,12 +480,154 @@ struct CPU_6502 {
   EatCycles(Cycles, 1);
  }
 
+ // ASL
  void ASL(uint32_t& Cycles, Byte& Dest) {
   C = (Dest & 0b10000000) != 0;
   Dest <<= 1;
   Z = (Dest == 0);
   N = (Dest & 0b10000000) != 0;
   EatCycles(Cycles, 1);
+ }
+
+ // BCC
+ void BCC(uint32_t& Cycles, Byte Offset) {
+  if (!C) {
+   Word targetAddress = (PC + static_cast<int8_t>(Offset)) & 0xFFFF;
+   if ((PC & 0xFF00) != (targetAddress & 0xFF00)) {
+    EatCycles(Cycles, 2);
+   }
+   PC = targetAddress;
+   EatCycles(Cycles, 1);
+  }
+  EatCycles(Cycles, 1);
+ }
+
+ // BCS
+ void BCS(uint32_t& Cycles, Byte Offset) {
+  if (C) {
+   Word targetAddress = (PC + static_cast<int8_t>(Offset)) & 0xFFFF;
+   if ((PC & 0xFF00) != (targetAddress & 0xFF00)) {
+    EatCycles(Cycles, 2);
+   }
+   PC = targetAddress;
+   EatCycles(Cycles, 1);
+  }
+  EatCycles(Cycles, 1);
+ }
+
+ // BEQ
+ void BEQ(uint32_t& Cycles, Byte Offset) {
+  if (Z) {
+   Word targetAddress = (PC + static_cast<int8_t>(Offset)) & 0xFFFF;
+   if ((PC & 0xFF00) != (targetAddress & 0xFF00)) {
+    EatCycles(Cycles, 2);
+   }
+   PC = targetAddress;
+   EatCycles(Cycles, 1);
+  }
+  EatCycles(Cycles, 1);
+ }
+
+ // BIT
+ void BIT(uint32_t& Cycles, Byte Value) {
+  Byte Mask = A & Value;
+  Z = (Mask == 0);
+  N = (Mask & 0b10000000) != 0;
+  O = (Mask & 0b01000000) != 0;
+  EatCycles(Cycles, 1);
+ }
+
+ // BMI
+ void BMI(uint32_t& Cycles, Byte Offset) {
+  if (N) {
+   Word targetAddress = (PC + static_cast<int8_t>(Offset)) & 0xFFFF;
+   if ((PC & 0xFF00) != (targetAddress & 0xFF00)) {
+    EatCycles(Cycles, 2);
+   }
+   PC = targetAddress;
+   EatCycles(Cycles, 1);
+  }
+  EatCycles(Cycles, 1);
+ }
+
+ // BNE
+ void BNE(uint32_t& Cycles, Byte Offset) {
+  if (!Z) {
+   Word targetAddress = (PC + static_cast<int8_t>(Offset)) & 0xFFFF;
+   if ((PC & 0xFF00) != (targetAddress & 0xFF00)) {
+    EatCycles(Cycles, 2);
+   }
+   PC = targetAddress;
+   EatCycles(Cycles, 1);
+  }
+  EatCycles(Cycles, 1);
+ }
+
+ // BPL
+ void BPL(uint32_t& Cycles, Byte Offset) {
+  if (!N) {
+   Word targetAddress = (PC + static_cast<int8_t>(Offset)) & 0xFFFF;
+   if ((PC & 0xFF00) != (targetAddress & 0xFF00)) {
+    EatCycles(Cycles, 2);
+   }
+   PC = targetAddress;
+   EatCycles(Cycles, 1);
+  }
+  EatCycles(Cycles, 1);
+ }
+
+ // BRK
+ void BRK(uint32_t& Cycles, Memory& memory) {
+  StackPushWord(Cycles, memory, PC); // 2 cycles
+  StackPushByte(Cycles, memory, GetProcessorStatus()); // 1 cycle
+  PC = 0xFFFE;
+  B = 0x01;
+  EatCycles(Cycles, 4); // 4 cycles
+ }
+
+ // BVC
+ void BVC(uint32_t& Cycles, Byte Offset) {
+  if (!O) {
+   Word targetAddress = (PC + static_cast<int8_t>(Offset)) & 0xFFFF;
+   if ((PC & 0xFF00) != (targetAddress & 0xFF00)) {
+    EatCycles(Cycles, 2);
+   }
+   PC = targetAddress;
+   EatCycles(Cycles, 1);
+  }
+  EatCycles(Cycles, 1);
+ }
+
+ // BVS
+ void BVS(uint32_t& Cycles, Byte Offset) {
+  if (O) {
+   Word targetAddress = (PC + static_cast<int8_t>(Offset)) & 0xFFFF;
+   if ((PC & 0xFF00) != (targetAddress & 0xFF00)) {
+    EatCycles(Cycles, 2);
+   }
+   PC = targetAddress;
+   EatCycles(Cycles, 1);
+  }
+  EatCycles(Cycles, 1);
+ }
+
+ void CLC(uint32_t& Cycles) {
+  C = 0x00;
+  EatCycles(Cycles, 2);
+ }
+
+ void CLD(uint32_t& Cycles) {
+  D = 0x00;
+  EatCycles(Cycles, 2);
+ }
+ void CLI(uint32_t& Cycles) {
+  I = 0x00;
+  EatCycles(Cycles, 2);
+ }
+
+ void CLV(uint32_t& Cycles) {
+  O = 0x00;
+  EatCycles(Cycles, 2);
  }
 
  void Execute(uint32_t Cycles, Memory& memory) {
@@ -551,7 +762,8 @@ struct CPU_6502 {
    case INS_ASL_A: {
     ASL(Cycles, A); // 1 cycle
     EatCycles(Cycles, 1);
-   }
+    printf("Handled INS_ASL_A\n");
+   } break;
 
    // ASL Zero Page
    case INS_ASL_ZP: {
@@ -559,16 +771,16 @@ struct CPU_6502 {
     Byte Value = ReadByte(Cycles, Address, memory); // 1 cycle
     ASL(Cycles, Value); // 1 cycle
     WriteValueToAddress(Cycles, memory, Address, Value); // 1 cycle
-    break;
-   }
+    printf("Handled INS_ASL_ZP\n");
+   } break;
    // ASL Zero Page X
    case INS_ASL_ZPX: {
     Byte Address = GetZeroPageAddress(Cycles, memory, X); // 3 cycles
     Byte Value = ReadByte(Cycles, Address, memory); // 1 cycle
     ASL(Cycles, Value); // 1 cycle
     WriteValueToAddress(Cycles, memory, Address, Value); // 1 cycle
-    break;
-   }
+    printf("Handled INS_ASL_ZPX\n");
+   } break;
 
    // ASL Absolute
    case INS_ASL_AB: {
@@ -576,7 +788,8 @@ struct CPU_6502 {
     Byte Value = ReadByte(Cycles, Address, memory); // 1 cycle
     ASL(Cycles, Value); // 1 cycle
     WriteValueToAddress(Cycles, memory, Address, Value); // 1 cycle
-   }
+    printf("Handled INS_ASL_AB\n");
+   } break;
 
    // ASL Absolute X
    case INS_ASL_ABX: {
@@ -585,7 +798,30 @@ struct CPU_6502 {
     ASL(Cycles, Value); // 1 cycle
     WriteValueToAddress(Cycles, memory, Address, Value); // 1 cycle
     EatCycles(Cycles, 1); // 1 cycle
-   }
+    printf("Handled INS_ASL_ABX\n");
+   } break;
+
+   // Branches
+
+   // BCC Relative
+   case INS_BCC_REL: {
+    Byte Offset = FetchByte(Cycles, memory); // 1 cycle
+    BCC(Cycles, Offset); // 
+    printf("Handled INS_BCC_REL\n");
+   } break;
+
+   // BCS Relative
+   case INS_BCS_REL: {
+    Byte Offset = FetchByte(Cycles, memory);
+    BCS(Cycles, Offset);
+    printf("Handled INS_BCS_REL\n");
+   } break;
+
+   case INS_BEQ_REL: {
+    Byte Offset = FetchByte(Cycles, memory);
+    BEQ(Cycles, Offset);
+    printf("Handled INS_BCS_REL\n");
+   } break;
 
    // JMP Absolute
    case INS_JMP_AB: {
@@ -617,8 +853,8 @@ int main() {
  Memory mem;
  CPU_6502 cpu;
  cpu.Reset(mem, 0x0);
- mem[0x0] = CPU_6502::INS_ADC_IM;
- mem[0x0001] = 0x16;
+ mem[0x0] = CPU_6502::INS_BCC_REL;
+ mem[0x0001] = 0x55;
  mem[0x0002] = CPU_6502::INS_ASL_ZP;
  mem[0x0003] = 0x04;
  mem[0x0004] = 0x04;
@@ -626,5 +862,6 @@ int main() {
  cpu.Execute(5, mem);
  mem.PrintRange(0x0, 0x050);
  cpu.PrintFlags();
+ cpu.PrintRegisters();
  return 0;
 }
