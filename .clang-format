@@ -1,0 +1,8 @@
+# .clang-format
+BasedOnStyle: WebKit
+IndentWidth: 1
+UseTab: Never
+ColumnLimit: 2000
+BreakBeforeBraces: Attach
+PenaltyBreakComment: 50
+IndentCaseLabels: false
