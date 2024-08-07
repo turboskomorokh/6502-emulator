@@ -817,10 +817,83 @@ struct CPU_6502 {
     printf("Handled INS_BCS_REL\n");
    } break;
 
+   // BEQ Relative
    case INS_BEQ_REL: {
     Byte Offset = FetchByte(Cycles, memory);
     BEQ(Cycles, Offset);
     printf("Handled INS_BCS_REL\n");
+   } break;
+
+   // BIT Zero Page
+   case INS_BIT_ZP: {
+    Byte Value = GetZeroPageAddressValue(Cycles, memory);
+    BIT(Cycles, Value);
+   }
+   
+   // BIT Absolute
+   case INS_BIT_AB: {
+    Byte Value = GetAbsoluteAddressValue(Cycles, memory);
+    BIT(Cycles, Value);
+   }
+   
+   // BMI Relative
+   case INS_BMI_REL: {
+    Byte Offset = FetchByte(Cycles, memory);
+    BMI(Cycles, Offset);
+    printf("Handled INS_BCS_REL\n");
+   } break;
+
+   // BNE Relative
+   case INS_BNE_REL: {
+    Byte Offset = FetchByte(Cycles, memory);
+    BNE(Cycles, Offset);
+    printf("Handled INS_BCS_REL\n");
+   } break;
+
+   // BPL Relative
+   case INS_BPL_REL: {
+    Byte Offset = FetchByte(Cycles, memory);
+    BPL(Cycles, Offset);
+    printf("Handled INS_BCS_REL\n");
+   } break;
+
+   // BRK Implied
+   case INS_BRK_IMPL: {
+    BRK(Cycles, memory);
+   } break;
+
+   // BVC Relative
+   case INS_BVC_REL: {
+    Byte Offset = FetchByte(Cycles, memory);
+    BVC(Cycles, Offset);
+    printf("Handled INS_BCS_REL\n");
+   } break;
+
+   // BVS Relative
+   case INS_BVS_REL: {
+    Byte Offset = FetchByte(Cycles, memory);
+    BVS(Cycles, Offset);
+    printf("Handled INS_BCS_REL\n");
+   } break;
+
+   // CLC Implied
+   case INS_CLC_IMPL: {
+    CLC(Cycles);
+   } break;
+
+   // CLD Implied
+   case INS_CLD_IMPL: {
+    CLD(Cycles);
+   } break;
+
+   // CLC Implied
+   case INS_CLI_IMPL: {
+    CLI(Cycles);
+   } break;
+
+   // CLC Implied
+   case INS_CLV_IMPL: {
+    CLV(Cycles);
    } break;
 
    // JMP Absolute
