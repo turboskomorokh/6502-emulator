@@ -6,3 +6,12 @@ ColumnLimit: 2000
 BreakBeforeBraces: Attach
 PenaltyBreakComment: 50
 IndentCaseLabels: false
+AlignAfterOpenBracket: Align
+AlignArrayOfStructures: Left
+AlignConsecutiveAssignments: 
+  Enabled: true
+  AcrossEmptyLines: true
+  AcrossComments: true
+  AlignFunctionPointers: true
+
+

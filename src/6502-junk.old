@@ -5,7 +5,6 @@
 #include <cstdint>
 
 #define MAX_MEM 1024 * 64 - 1
-#define PRINT_ROW_SIZE 8
 
 typedef unsigned char Byte;
 typedef unsigned short Word;
@@ -19,27 +18,33 @@ struct Memory {
   }
  }
 
+ void ReadBin(FILE* fp) {
+  char ch;
+  Word Addr = 0;
+  while ((ch = fgetc(fp)) != EOF || Addr > MAX_MEM) {
+   Data[Addr] = ch;
+   Addr++;
+  }
+ }
+
  void PrintRange(Word addr, Word end) {
   printf("\nMemory dump 0x%04x-0x%04x:\n", addr, end);
-  while (addr != end || addr > MAX_MEM) {
-   printf("0x%04x: ", addr);
-   for (int i = 0; i < PRINT_ROW_SIZE; i++) {
-    printf("0x%02X ", Data[addr]);
-    addr++;
+
+  printf("0x%04x ", addr);
+  while (addr <= end) {
+   printf("0x%02x", Data[addr]);
+
+   if ((addr + 1) % 8 == 0) { // Печатаем адрес следующей строки после каждого 8 байтов
+    printf("\n");
+    if (addr + 1 <= end) {
+     printf("0x%04x ", addr + 1);
+    }
+   } else {
+    printf(" ");
    }
-   printf("\n");
+   addr++;
   }
   printf("\n");
- }
- void Print() {
-  for (uint32_t addr = 0; addr < MAX_MEM;) {
-   printf("0x%04x: ", addr);
-   for (int i = 0; i < PRINT_ROW_SIZE; i++) {
-    printf("0x%02X ", Data[addr]);
-    addr++;
-   }
-   printf("\n");
-  }
  }
 
  Byte operator[](Word Address) const { return Data[Address]; }
@@ -105,7 +110,7 @@ struct CPU_6502 {
   INS_STA_INY = 0x91, //    2       6
   // STX
   INS_STX_ZP = 0x86, //    2       3
-  INS_STA_ZPY = 0x96, //    2       4
+  INS_STX_ZPY = 0x96, //    2       4
   INS_STX_AB = 0x8E, //    3       4
   // STY
   INS_STY_ZP = 0x84, //    2       3
@@ -280,8 +285,10 @@ struct CPU_6502 {
          "Decimal   (D): 0x%02x\n"
          "Break     (B): 0x%02x\n"
          "Overflow  (O): 0x%02x\n"
-         "Negative  (N): 0x%02x\n",
-      C, Z, I, D, B, O, N);
+         "Negative  (N): 0x%02x\n"
+         "Processor Status: 0x%02x\n",
+      C, Z, I, D, B, O, N, GetProcessorStatus());
+  
  }
 
  void PrintRegisters() {
@@ -301,7 +308,7 @@ struct CPU_6502 {
   mem.Init();
  }
 
- Byte GetProcessorStatus(uint32_t& Cycles) {
+ Byte GetProcessorStatus() {
   Byte Status = 0;
   Status |= (C ? 0x01 : 0x00);
   Status |= (Z ? 0x02 : 0x00);
@@ -310,10 +317,17 @@ struct CPU_6502 {
   Status |= (B ? 0x10 : 0x00);
   Status |= (O ? 0x40 : 0x00);
   Status |= (N ? 0x80 : 0x00);
-  EatCycles(Cycles, 1);
+  
   return Status;
  }
- void SetProcessorStatus(uint32_t& Cycles, Byte ProcessorStatus) {
+
+ // Cycles: 1;
+ Byte GetProcessorStatus(uint32_t& Cycles) {
+  EatCycles(Cycles, 1);
+  return GetProcessorStatus();
+ }
+
+ void SetProcessorStatus(Byte ProcessorStatus) {
   C = (ProcessorStatus & 0x01);
   Z = (ProcessorStatus & 0x02);
   I = (ProcessorStatus & 0x04);
@@ -321,6 +335,9 @@ struct CPU_6502 {
   B = (ProcessorStatus & 0x10);
   O = (ProcessorStatus & 0x20);
   N = (ProcessorStatus & 0x80);
+ }
+ void SetProcessorStatus(uint32_t& Cycles, Byte ProcessorStatus) {
+  SetProcessorStatus(ProcessorStatus);
   EatCycles(Cycles, 1);
  }
 
@@ -438,36 +455,47 @@ struct CPU_6502 {
   Byte M = ReadByte(Cycles, EffectiveAddress, memory); // 1 cycle
   return M;
  }
+ // Does 4 cycles
+ Word GetIndirectAddressX(uint32_t& Cycles, Memory& memory) {
+  Byte ZeroPageAddress = FetchByte(Cycles, memory); // 1
+  Word IndirectAddress = (ZeroPageAddress + X) & 0xFF;
+  EatCycles(Cycles, 1); // 1
+
+  Word EffectiveAddress = ReadWord(Cycles, IndirectAddress, memory); // 2
+  return EffectiveAddress;
+ }
 
  // Does 5 cycles
  Byte GetIndirectAddressValueX(uint32_t& Cycles, Memory& memory) {
-  Byte ZeroPageAddress = FetchByte(Cycles, memory); // 1 cycle
-  Word IndirectAddress = (ZeroPageAddress + X) & 0xFF;
-  EatCycles(Cycles, 1); // 1 cycle
-
-  Word EffectiveAddress = ReadWord(Cycles, IndirectAddress, memory); // 2 cycles
-  Byte M = ReadByte(Cycles, EffectiveAddress, memory); // 1 cycle
+  Word Address = GetIndirectAddressX(Cycles, memory); // 4
+  Byte M = ReadByte(Cycles, Address, memory); // 1
   return M;
  }
 
- // Does 4 cycles, 5 on page crossing
- Byte GetIndirectAddressValueY(uint32_t& Cycles, Memory& memory) {
-  Byte ZeroPageAddress = FetchByte(Cycles, memory); // 1 cycle
-  Word IndirectAddress = ReadWord(Cycles, ZeroPageAddress, memory); // 2 cycles
+ // Does 3 cycles, 4 on page crossing
+ Word GetIndirectAddressY(uint32_t& Cycles, Memory& memory) {
+  Byte ZeroPageAddress = FetchByte(Cycles, memory); // 1
+  Word IndirectAddress = ReadWord(Cycles, ZeroPageAddress, memory); // 2
   Word EffectiveAddress = IndirectAddress + Y;
 
   if (((IndirectAddress & 0xFF00) != (EffectiveAddress & 0xFF00))) {
    EatCycles(Cycles, 1); // 1 cycle
   }
 
-  Byte M = ReadByte(Cycles, EffectiveAddress, memory); // 1 cycle
+  return EffectiveAddress;
+ }
+
+ // Does 4 cycles, 5 on page crossing
+ Byte GetIndirectAddressValueY(uint32_t& Cycles, Memory& memory) {
+  Word Address = GetIndirectAddressY(Cycles, memory); // 3/4
+  Byte M = ReadByte(Cycles, Address, memory); // 1
   return M;
  }
 
  // Does 1 cycle
  void WriteValueToAddress(uint32_t Cycles, Memory& memory, Word Address, Byte M) {
   memory[Address] = M;
-  EatCycles(Cycles, 1); // 1 cycle
+  EatCycles(Cycles, 1); // 1
  }
 
  // void LDA(uint32_t &Cycles, Byte M) {
@@ -477,9 +505,8 @@ struct CPU_6502 {
  // }
 
  void ADC(uint32_t& Cycles, Byte M) {
-  Word Sum = (Word)A + (Word)M + (Word)C;
+  Word Sum = A + M + C;
 
-  A = (Byte)Sum;
   C = (Sum > 0xFF);
   Z = (A == 0);
   N = (A & 0x80);
@@ -683,7 +710,7 @@ struct CPU_6502 {
   EatCycles(Cycles, 2);
  }
 
- void EOR(uint32_t Cycles, Byte M) {
+ void EOR(Byte M) {
   A ^= M;
   Z = (A == 0);
   N = (A & 0x80);
@@ -805,24 +832,92 @@ struct CPU_6502 {
   EatCycles(Cycles, 2);
  }
 
-
-//  Byte ProcessorStatus = GetProcessorStatus(Cycles); // 1 cycle
-//   StackPushWord(Cycles, memory, PC); // 2 cycles
-//   StackPushByte(Cycles, memory, ProcessorStatus); // 1 cycle
-//   PC = 0xFFFE;
-//   B = 0x01;
-//   EatCycles(Cycles, 3); // 3 cycles
  void RTI(uint32_t& Cycles, Memory& memory) {
   Byte ProcessorStatus = StackPullByte(Cycles, memory); // 1 cycle
   Word StackPC = StackPullWord(Cycles, memory); // 2 cycles
-  
+
   SetProcessorStatus(Cycles, ProcessorStatus); // 1 cycle
   PC = StackPC;
   B = 0x00;
   EatCycles(Cycles, 2);
  }
 
+ void RTS(uint32_t& Cycles, Memory& memory) {
+  Word StackPC = StackPullWord(Cycles, memory); // 2 cycles
+  PC = StackPC + 1;
+  EatCycles(Cycles, 4);
+ }
 
+ void SBC(uint32_t& Cycles, Byte M) {
+  Word Sub = (Word)A - (Word)M - (1 - (Word)C);
+
+  A = (Byte)Sub;
+  C = (Sub > 0xFF);
+  Z = (A == 0);
+  N = (A & 0x80);
+  O = (((A ^ M) & (A ^ Sub)) & 0x80);
+  EatCycles(Cycles, 1);
+ }
+
+ void SEC(uint32_t& Cycles) {
+  C = 0x00;
+  EatCycles(Cycles, 2);
+ }
+
+ void SED(uint32_t& Cycles) {
+  D = 0x00;
+  EatCycles(Cycles, 2);
+ }
+
+ void SEI(uint32_t& Cycles) {
+  I = 0x00;
+  EatCycles(Cycles, 2);
+ }
+
+ void STA(uint32_t& Cycles, Memory& memory, Word Address) {
+  WriteValueToAddress(Cycles, memory, Address, A); // 1
+  EatCycles(Cycles, 1); // 1
+ }
+
+ void STX(uint32_t& Cycles, Memory& memory, Word Address) {
+  WriteValueToAddress(Cycles, memory, Address, X); // 1
+  EatCycles(Cycles, 1); // 1
+ }
+
+ void STY(uint32_t& Cycles, Memory& memory, Word Address) {
+  WriteValueToAddress(Cycles, memory, Address, Y); // 1
+  EatCycles(Cycles, 1); // 1
+ }
+
+ void TAX(uint32_t& Cycles) {
+  X = A;
+  EatCycles(Cycles, 2);
+ }
+
+ void TAY(uint32_t& Cycles) {
+  Y = A;
+  EatCycles(Cycles, 2);
+ }
+
+ void TSX(uint32_t& Cycles) {
+  X = SP;
+  EatCycles(Cycles, 2);
+ }
+
+ void TXA(uint32_t& Cycles) {
+  A = X;
+  EatCycles(Cycles, 2);
+ }
+
+ void TXS(uint32_t& Cycles) {
+  SP = X;
+  EatCycles(Cycles, 2);
+ }
+
+ void TYA(uint32_t& Cycles) {
+  A = Y;
+  EatCycles(Cycles, 2);
+ }
 
  void Execute(uint32_t Cycles, Memory& memory) {
   while (Cycles > 0) {
@@ -1598,7 +1693,7 @@ struct CPU_6502 {
     printf("Handled INS_ROL_ABX\n");
    }
 
-  case INS_ROR_A: {
+   case INS_ROR_A: {
     ROR(Cycles, A);
     printf("Handled INS_ROR_A\n");
    }
@@ -1640,6 +1735,183 @@ struct CPU_6502 {
     printf("Handled INS_RTI_IMPL\n");
    }
 
+   case INS_RTS_IMPL: {
+    RTS(Cycles, memory);
+    printf("Handled INS_RTS_IMPL\n");
+   } break;
+
+   case INS_SBC_IM: {
+    Byte M = FetchByte(Cycles, memory); // 1
+    SBC(Cycles, M); // 1
+    printf("Handled INS_SBC_IM\n");
+   } break;
+
+   case INS_SBC_ZP: {
+    Byte M = GetZeroPageAddressValue(Cycles, memory); // 2
+    SBC(Cycles, M); // 1
+    printf("Handled INS_SBC_ZP\n");
+   } break;
+
+   case INS_SBC_ZPX: {
+    Byte M = GetZeroPageAddressValue(Cycles, memory, X); // 3
+    SBC(Cycles, M); // 1
+    printf("Handled INS_SBC_ZPX\n");
+   } break;
+
+   case INS_SBC_AB: {
+    Byte M = GetAbsoluteAddressValue(Cycles, memory); // 3
+    SBC(Cycles, M);
+    printf("Handled INS_SBC_AB\n");
+   } break;
+
+   case INS_SBC_ABX: {
+    Byte M = GetAbsoluteAddressValue(Cycles, memory, X); // 3/4
+    SBC(Cycles, M); // 1
+    printf("Handled INS_SBC_ABX\n");
+   } break;
+
+   case INS_SBC_ABY: {
+    Byte M = GetAbsoluteAddressValue(Cycles, memory, Y); // 3/4
+    SBC(Cycles, M); // 1
+    printf("Handled INS_SBC_ABY\n");
+   } break;
+
+   case INS_SBC_INX: {
+    Byte M = GetIndirectAddressValueX(Cycles, memory); // 5
+    SBC(Cycles, M); // 1
+    printf("Handled INS_SBC_INX\n");
+   } break;
+
+   case INS_SBC_INY: {
+    Byte M = GetIndirectAddressValueY(Cycles, memory); // 4/5
+    SBC(Cycles, M); // 1
+    printf("Handled INS_SBC_INY\n");
+   } break;
+
+   case INS_SEC_IMPL: {
+    SEC(Cycles);
+    printf("Handled INS_SEC_IMPL\n");
+   } break;
+
+   case INS_SED_IMPL: {
+    SED(Cycles);
+    printf("Handled INS_SED_IMPL\n");
+   } break;
+
+   case INS_SEI_IMPL: {
+    SEI(Cycles);
+    printf("Handled INS_SEI_IMPL\n");
+   } break;
+
+   case INS_STA_ZP: {
+    Byte Address = GetZeroPageAddress(Cycles, memory); // 1
+    STA(Cycles, memory, Address); // 2
+
+    printf("Handled INS_STA_ZP\n");
+   } break;
+
+   case INS_STA_ZPX: {
+    Byte Address = GetZeroPageAddress(Cycles, memory, X); // 2
+    STA(Cycles, memory, Address); // 2
+    printf("Handled INS_STA_ZPX\n");
+   } break;
+
+   case INS_STA_AB: {
+    Word Address = GetAbsoluteAddress(Cycles, memory); // 2
+    STA(Cycles, memory, Address); // 2
+    printf("Handled INS_STA_AB\n");
+   } break;
+
+   case INS_STA_ABX: {
+    Word Address = GetAbsoluteAddress(Cycles, memory, X); // 2/3
+    STA(Cycles, memory, Address); // 2
+    printf("Handled INS_STA_ABX\n");
+   } break;
+
+   case INS_STA_ABY: {
+    Word Address = GetAbsoluteAddress(Cycles, memory, Y); // 2/3
+    STA(Cycles, memory, Address); // 2
+    printf("Handled INS_STA_ABY\n");
+   } break;
+
+   case INS_STA_INX: {
+    Word Address = GetIndirectAddressX(Cycles, memory); // 4
+    STA(Cycles, memory, Address); // 2
+    printf("Handled INS_STA_INX\n");
+   } break;
+
+   case INS_STA_INY: {
+    Word Address = GetIndirectAddressY(Cycles, memory); // 3/4
+    STA(Cycles, memory, Address); // 2
+    printf("Handled INS_STA_INY\n");
+   } break;
+
+   case INS_STX_ZP: {
+    Byte Address = GetZeroPageAddress(Cycles, memory); // 1
+    STX(Cycles, memory, Address); // 2
+    printf("Handled INS_STX_ZP\n");
+   }
+
+   case INS_STX_ZPY: {
+    Byte Address = GetZeroPageAddress(Cycles, memory, Y); // 2
+    STX(Cycles, memory, Address); // 2
+    printf("Handled INS_STX_ZPY\n");
+   }
+
+   case INS_STX_AB: {
+    Word Address = GetAbsoluteAddress(Cycles, memory); // 2/3
+    STX(Cycles, memory, Address); // 2
+    printf("Handled INS_STX_AB\n");
+   }
+
+   case INS_STY_ZP: {
+    Byte Address = GetZeroPageAddress(Cycles, memory); // 1
+    STY(Cycles, memory, Address); // 2
+    printf("Handled INS_STY_ZP\n");
+   }
+
+   case INS_STY_ZPX: {
+    Byte Address = GetZeroPageAddress(Cycles, memory, X); // 2
+    STY(Cycles, memory, Address); // 2
+    printf("Handled INS_STY_ZPX\n");
+   }
+
+   case INS_STY_AB: {
+    Word Address = GetAbsoluteAddress(Cycles, memory); // 2/3
+    STY(Cycles, memory, Address); // 2
+    printf("Handled INS_STY_AB\n");
+   }
+
+   case INS_TAX_IMPL: {
+    TAX(Cycles);
+    printf("Handled INS_TAX_IMPL\n");
+   }
+
+   case INS_TAY_IMPL: {
+    TAY(Cycles);
+    printf("Handled INS_TAY_IMPL\n");
+   }
+
+   case INS_TSX_IMPL: {
+    TSX(Cycles);
+    printf("Handled INS_TSX_IMPL\n");
+   }
+
+   case INS_TXA_IMPL: {
+    TXA(Cycles);
+    printf("Handled INS_TXA_IMPL\n");
+   }
+
+   case INS_TXS_IMPL: {
+    TXS(Cycles);
+    printf("Handled INS_TXS_IMPL\n");
+   }
+
+   case INS_TYA_IMPL: {
+    TYA(Cycles);
+    printf("Handled INS_TYA_IMPL\n");
+   }
+
    case INS_JMP_IN: {
     printf("Unable to handle indirect JMP\n");
    } break;
@@ -1657,14 +1929,12 @@ int main() {
  Memory mem;
  CPU_6502 cpu;
  cpu.Reset(mem, 0x0);
- mem[0x0] = CPU_6502::INS_LDX_IM;
- mem[0x0001] = 0x00;
- mem[0x0002] = CPU_6502::INS_LDA_IM;
- mem[0x0003] = 0x03;
- mem[0x0004] = CPU_6502::INS_JMP_AB;
+ FILE* fp = fopen("a.out", "rb");
+ mem.ReadBin(fp);
+ free(fp);
 
  cpu.Execute(15, mem);
- mem.PrintRange(0x0000, 0x0100);
+ mem.PrintRange(0x0000, 0x0050);
  cpu.PrintFlags();
  cpu.PrintRegisters();
  return 0;
