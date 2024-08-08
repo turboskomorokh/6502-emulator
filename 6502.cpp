@@ -241,6 +241,10 @@ struct CPU_6502 {
   // JUMPS AND CALLS INSTRUCTIONS
   // JMP
   INS_JMP_AB = 0x4C, //    3       5
+
+  // On the holy earth why
+  INS_JMP_IN = 0x6C, //    3       5
+
   INS_JSR_AB = 0x20, //    3       6
   INS_RTS_IMPL = 0x60, //    1       6
   // BRANCH INSTRUCTIONS
@@ -297,7 +301,7 @@ struct CPU_6502 {
   mem.Init();
  }
 
- Byte GetProcessorStatus() {
+ Byte GetProcessorStatus(uint32_t& Cycles) {
   Byte Status = 0;
   Status |= (C ? 0x01 : 0x00);
   Status |= (Z ? 0x02 : 0x00);
@@ -306,7 +310,18 @@ struct CPU_6502 {
   Status |= (B ? 0x10 : 0x00);
   Status |= (O ? 0x40 : 0x00);
   Status |= (N ? 0x80 : 0x00);
+  EatCycles(Cycles, 1);
   return Status;
+ }
+ void SetProcessorStatus(uint32_t& Cycles, Byte ProcessorStatus) {
+  C = (ProcessorStatus & 0x01);
+  Z = (ProcessorStatus & 0x02);
+  I = (ProcessorStatus & 0x04);
+  D = (ProcessorStatus & 0x08);
+  B = (ProcessorStatus & 0x10);
+  O = (ProcessorStatus & 0x20);
+  N = (ProcessorStatus & 0x80);
+  EatCycles(Cycles, 1);
  }
 
  void EatCycles(uint32_t& Cycles, uint32_t amount /* amount of cycles to consume */) {
@@ -317,32 +332,32 @@ struct CPU_6502 {
  }
 
  // Does 1 cycle
- void StackPushByte(uint32_t& Cycles, Memory& memory, Byte Value) {
-  memory[SP] = Value;
+ void StackPushByte(uint32_t& Cycles, Memory& memory, Byte M) {
+  memory[SP] = M;
   SP--;
   EatCycles(Cycles, 1);
  }
 
  // Does 2 cycles
- void StackPushWord(uint32_t& Cycles, Memory& memory, Word Value) {
-  StackPushByte(Cycles, memory, Value);
-  StackPushByte(Cycles, memory, Value >> 8);
+ void StackPushWord(uint32_t& Cycles, Memory& memory, Word M) {
+  StackPushByte(Cycles, memory, M);
+  StackPushByte(Cycles, memory, M >> 8);
  }
 
  // Does 1 cycle
  Byte StackPullByte(uint32_t& Cycles, Memory& memory) {
-  Byte Value = memory[SP];
+  Byte M = memory[SP];
   SP++;
   EatCycles(Cycles, 1);
-  return Value;
+  return M;
  }
 
  // Does 2 cycles
  Word StackPullWord(uint32_t& Cycles, Memory& memory) {
   Byte hi = StackPullByte(Cycles, memory);
   Byte lo = StackPullByte(Cycles, memory);
-  Word Value = (hi << 8) | lo;
-  return Value;
+  Word M = (hi << 8) | lo;
+  return M;
  }
 
  // Does 1 cycle
@@ -407,31 +422,32 @@ struct CPU_6502 {
  // Does 2 cycles, 3 on offset
  Byte GetZeroPageAddressValue(uint32_t& Cycles, Memory& memory, Byte Offset = 0x00) {
   Byte ZeroPageAddress = GetZeroPageAddress(Cycles, memory, Offset);
-  Byte Value = ReadByte(Cycles, ZeroPageAddress, memory); // 1 cycle
-  return Value;
+  Byte M = ReadByte(Cycles, ZeroPageAddress, memory); // 1 cycle
+  return M;
  }
 
  // Does 3 cycles, 4 on page crossing
  Byte GetAbsoluteAddressValue(uint32_t& Cycles, Memory& memory, Byte Offset = 0x00) {
-  Word BaseAddress = GetAbsoluteAddress(Cycles, memory); // 2 cycles
+  Word BaseAddress = GetAbsoluteAddress(Cycles, memory, Offset); // 2 cycles
   Word EffectiveAddress = (BaseAddress + Offset) & 0xFFFF;
 
   if (((BaseAddress & 0xFF00) != (EffectiveAddress & 0xFF00))) {
-   EatCycles(Cycles, 1);
+   EatCycles(Cycles, 1); // 1 cycle
   }
 
-  Byte Value = ReadByte(Cycles, EffectiveAddress, memory); // Читаем значение из памяти
-  return Value;
+  Byte M = ReadByte(Cycles, EffectiveAddress, memory); // 1 cycle
+  return M;
  }
 
- // Does 4 cycles
+ // Does 5 cycles
  Byte GetIndirectAddressValueX(uint32_t& Cycles, Memory& memory) {
   Byte ZeroPageAddress = FetchByte(Cycles, memory); // 1 cycle
   Word IndirectAddress = (ZeroPageAddress + X) & 0xFF;
+  EatCycles(Cycles, 1); // 1 cycle
 
   Word EffectiveAddress = ReadWord(Cycles, IndirectAddress, memory); // 2 cycles
-  Byte Value = ReadByte(Cycles, EffectiveAddress, memory); // 1 cycle
-  return Value;
+  Byte M = ReadByte(Cycles, EffectiveAddress, memory); // 1 cycle
+  return M;
  }
 
  // Does 4 cycles, 5 on page crossing
@@ -440,56 +456,52 @@ struct CPU_6502 {
   Word IndirectAddress = ReadWord(Cycles, ZeroPageAddress, memory); // 2 cycles
   Word EffectiveAddress = IndirectAddress + Y;
 
-  // check page crossing
   if (((IndirectAddress & 0xFF00) != (EffectiveAddress & 0xFF00))) {
    EatCycles(Cycles, 1); // 1 cycle
   }
 
-  Byte Value = ReadByte(Cycles, EffectiveAddress, memory); // 1 cycle
-  return Value;
+  Byte M = ReadByte(Cycles, EffectiveAddress, memory); // 1 cycle
+  return M;
  }
 
- void WriteValueToAddress(uint32_t Cycles, Memory& memory, Word Address, Byte Value) {
-  memory[Address] = Value;
+ // Does 1 cycle
+ void WriteValueToAddress(uint32_t Cycles, Memory& memory, Word Address, Byte M) {
+  memory[Address] = M;
   EatCycles(Cycles, 1); // 1 cycle
  }
 
- // void LDA(uint32_t &Cycles, Byte Value) {
- //   A = Value;
+ // void LDA(uint32_t &Cycles, Byte M) {
+ //   A = M;
  //   Z = (A == 0);
- //   N = (A & 0b10000000) != 0;
+ //   N = (A & 0x80);
  // }
 
- // ADC
- void ADC(uint32_t& Cycles, Byte Value) {
-  Word Sum = (Word)A + (Word)Value + (Word)C;
+ void ADC(uint32_t& Cycles, Byte M) {
+  Word Sum = (Word)A + (Word)M + (Word)C;
 
   A = (Byte)Sum;
   C = (Sum > 0xFF);
   Z = (A == 0);
-  N = (A & 0b10000000) != 0;
-  O = (((A ^ Value) & (A ^ Sum)) & 0x80) != 0;
+  N = (A & 0x80);
+  O = (((A ^ M) & (A ^ Sum)) & 0x80);
   EatCycles(Cycles, 1);
  }
 
- // AND
- void AND(uint32_t& Cycles, Byte Value) {
-  A &= Value;
+ void AND(uint32_t& Cycles, Byte M) {
+  A &= M;
   Z = (A == 0);
-  N = (A & 0b10000000) != 0;
+  N = (A & 0x80);
   EatCycles(Cycles, 1);
  }
 
- // ASL
  void ASL(uint32_t& Cycles, Byte& Dest) {
-  C = (Dest & 0b10000000) != 0;
+  C = (Dest & 0x80);
   Dest <<= 1;
   Z = (Dest == 0);
-  N = (Dest & 0b10000000) != 0;
+  N = (Dest & 0x80);
   EatCycles(Cycles, 1);
  }
 
- // BCC
  void BCC(uint32_t& Cycles, Byte Offset) {
   if (!C) {
    Word targetAddress = (PC + Offset) & 0xFFFF;
@@ -502,7 +514,6 @@ struct CPU_6502 {
   EatCycles(Cycles, 1);
  }
 
- // BCS
  void BCS(uint32_t& Cycles, Byte Offset) {
   if (C) {
    Word targetAddress = (PC + Offset) & 0xFFFF;
@@ -515,7 +526,6 @@ struct CPU_6502 {
   EatCycles(Cycles, 1);
  }
 
- // BEQ
  void BEQ(uint32_t& Cycles, Byte Offset) {
   if (Z) {
    Word targetAddress = (PC + Offset) & 0xFFFF;
@@ -528,16 +538,14 @@ struct CPU_6502 {
   EatCycles(Cycles, 1);
  }
 
- // BIT
- void BIT(uint32_t& Cycles, Byte Value) {
-  Byte Mask = A & Value;
+ void BIT(uint32_t& Cycles, Byte M) {
+  Byte Mask = A & M;
   Z = (Mask == 0);
-  N = (Mask & 0b10000000) != 0;
-  O = (Mask & 0b01000000) != 0;
+  N = (Mask & 0x80);
+  O = (Mask & 0x80);
   EatCycles(Cycles, 1);
  }
 
- // BMI
  void BMI(uint32_t& Cycles, Byte Offset) {
   if (N) {
    Word targetAddress = (PC + Offset) & 0xFFFF;
@@ -550,7 +558,6 @@ struct CPU_6502 {
   EatCycles(Cycles, 1);
  }
 
- // BNE
  void BNE(uint32_t& Cycles, Byte Offset) {
   if (!Z) {
    Word targetAddress = (PC + Offset) & 0xFFFF;
@@ -563,7 +570,6 @@ struct CPU_6502 {
   EatCycles(Cycles, 1);
  }
 
- // BPL
  void BPL(uint32_t& Cycles, Byte Offset) {
   if (!N) {
    Word targetAddress = (PC + Offset) & 0xFFFF;
@@ -576,16 +582,15 @@ struct CPU_6502 {
   EatCycles(Cycles, 1);
  }
 
- // BRK
  void BRK(uint32_t& Cycles, Memory& memory) {
+  Byte ProcessorStatus = GetProcessorStatus(Cycles); // 1 cycle
   StackPushWord(Cycles, memory, PC); // 2 cycles
-  StackPushByte(Cycles, memory, GetProcessorStatus()); // 1 cycle
+  StackPushByte(Cycles, memory, ProcessorStatus); // 1 cycle
   PC = 0xFFFE;
   B = 0x01;
-  EatCycles(Cycles, 4); // 4 cycles
+  EatCycles(Cycles, 3); // 3 cycles
  }
 
- // BVC
  void BVC(uint32_t& Cycles, Byte Offset) {
   if (!O) {
    Word targetAddress = (PC + Offset) & 0xFFFF;
@@ -598,7 +603,6 @@ struct CPU_6502 {
   EatCycles(Cycles, 1);
  }
 
- // BVS
  void BVS(uint32_t& Cycles, Byte Offset) {
   if (O) {
    Word targetAddress = (PC + Offset) & 0xFFFF;
@@ -620,6 +624,7 @@ struct CPU_6502 {
   D = 0x00;
   EatCycles(Cycles, 2);
  }
+
  void CLI(uint32_t& Cycles) {
   I = 0x00;
   EatCycles(Cycles, 2);
@@ -629,6 +634,195 @@ struct CPU_6502 {
   O = 0x00;
   EatCycles(Cycles, 2);
  }
+
+ void CMP(uint32_t& Cycles, Byte M) {
+  Byte Result = A - M;
+  C = (A >= M);
+  Z = (Result == 0);
+  N = (Result & 0x80);
+  EatCycles(Cycles, 1);
+ }
+
+ void CPX(uint32_t& Cycles, Byte M) {
+  Byte Result = X - M;
+  C = (X >= M);
+  Z = (Result == 0);
+  N = (Result & 0x80);
+  EatCycles(Cycles, 1);
+ }
+
+ void CPY(uint32_t& Cycles, Byte M) {
+  Byte Result = Y - M;
+  C = (Y >= M);
+  Z = (Result == 0);
+  N = (Result & 0x80);
+  EatCycles(Cycles, 1);
+ }
+
+ void DEC(uint32_t& Cycles, Byte& Dest) {
+  if (Dest)
+   Dest--;
+  Z = (Dest == 0);
+  N = (Dest & 0x80);
+  EatCycles(Cycles, 2);
+ }
+
+ void DEX(uint32_t& Cycles) {
+  if (X)
+   X--;
+  Z = (X == 0);
+  N = (X & 0x80);
+  EatCycles(Cycles, 2);
+ }
+
+ void DEY(uint32_t& Cycles) {
+  if (Y)
+   Y--;
+  Z = (Y == 0);
+  N = (Y & 0x80);
+  EatCycles(Cycles, 2);
+ }
+
+ void EOR(uint32_t Cycles, Byte M) {
+  A ^= M;
+  Z = (A == 0);
+  N = (A & 0x80);
+  EatCycles(Cycles, 1);
+ }
+
+ void INC(uint32_t& Cycles, Byte& Dest) {
+  Dest++;
+  Z = (Dest == 0);
+  N = (Dest & 0x80);
+  EatCycles(Cycles, 2);
+ }
+
+ void INX(uint32_t& Cycles) {
+  X++;
+  Z = (X == 0);
+  N = (X & 0x80);
+  EatCycles(Cycles, 2);
+ }
+
+ void INY(uint32_t& Cycles) {
+  Y++;
+  Z = (Y == 0);
+  N = (Y & 0x80);
+  EatCycles(Cycles, 2);
+ }
+
+ void JMP(uint32_t& Cycles, Word Address) {
+  PC = Address;
+  EatCycles(Cycles, 3);
+ }
+
+ void JSR(uint32_t& Cycles, Memory& memory, Word Address) {
+  StackPushWord(Cycles, memory, PC + 2); // 2 cycles
+  PC = Address;
+  EatCycles(Cycles, 2); // 2 cycles
+ }
+
+ void LDA(uint32_t& Cycles, Byte M) {
+  A = M;
+  EatCycles(Cycles, 1);
+ }
+
+ void LDX(uint32_t& Cycles, Byte M) {
+  X = M;
+  EatCycles(Cycles, 1);
+ }
+
+ void LDY(uint32_t& Cycles, Byte M) {
+  Y = M;
+  EatCycles(Cycles, 1);
+ }
+
+ void LSR(uint32_t& Cycles, Byte& Dest) {
+  C = (Dest & 0x80);
+  Dest <<= 1;
+  Z = (Dest == 0);
+  N = (Dest & 0x80);
+  EatCycles(Cycles, 1);
+ }
+
+ void NOP(uint32_t& Cycles) { EatCycles(Cycles, 2); }
+
+ void ORA(uint32_t& Cycles, Byte M) {
+  A = A | M;
+  Z = (A == 0);
+  N = (A & 0x80);
+  EatCycles(Cycles, 1);
+ }
+
+ void PHA(uint32_t& Cycles, Memory& memory) {
+  StackPushByte(Cycles, memory, A);
+  EatCycles(Cycles, 2);
+ }
+
+ void PHP(uint32_t& Cycles, Memory& memory) {
+  Byte ProcessorStatus = GetProcessorStatus(Cycles); // 1 cycle
+  StackPushWord(Cycles, memory, ProcessorStatus); // 2 cycles
+ }
+
+ void PLA(uint32_t& Cycles, Memory& memory) {
+  A = StackPullByte(Cycles, memory); // 1 cycle
+  EatCycles(Cycles, 3); // 3 cycles
+ }
+
+ void PLP(uint32_t& Cycles, Memory& memory) {
+  Byte ProcessorStatus = StackPullByte(Cycles, memory); // 1 cycle
+  SetProcessorStatus(Cycles, ProcessorStatus); // 1 cycle
+  EatCycles(Cycles, 2);
+ }
+
+ void ROL(uint32_t& Cycles, Byte& Dest) {
+  bool Carry = C;
+  C = (Dest & 0x80) != 0;
+  Dest <<= 1;
+
+  if (Carry)
+   Dest |= 0x01;
+  else
+   Dest &= ~0x01;
+  Z = (Dest == 0);
+  N = (Dest & 0x80);
+
+  EatCycles(Cycles, 2);
+ }
+
+ void ROR(uint32_t& Cycles, Byte& Dest) {
+  bool Carry = C;
+  C = (Dest & 0x80) != 0;
+  Dest >>= 1;
+
+  if (Carry)
+   Dest |= 0x01;
+  else
+   Dest &= ~0x01;
+  Z = (Dest == 0);
+  N = (Dest & 0x80);
+
+  EatCycles(Cycles, 2);
+ }
+
+
+//  Byte ProcessorStatus = GetProcessorStatus(Cycles); // 1 cycle
+//   StackPushWord(Cycles, memory, PC); // 2 cycles
+//   StackPushByte(Cycles, memory, ProcessorStatus); // 1 cycle
+//   PC = 0xFFFE;
+//   B = 0x01;
+//   EatCycles(Cycles, 3); // 3 cycles
+ void RTI(uint32_t& Cycles, Memory& memory) {
+  Byte ProcessorStatus = StackPullByte(Cycles, memory); // 1 cycle
+  Word StackPC = StackPullWord(Cycles, memory); // 2 cycles
+  
+  SetProcessorStatus(Cycles, ProcessorStatus); // 1 cycle
+  PC = StackPC;
+  B = 0x00;
+  EatCycles(Cycles, 2);
+ }
+
+
 
  void Execute(uint32_t Cycles, Memory& memory) {
   while (Cycles > 0) {
@@ -642,59 +836,58 @@ struct CPU_6502 {
 
    // ADC Immediate
    case INS_ADC_IM: {
-    Byte Value = FetchByte(Cycles, memory); // 1 cycle
-    ADC(Cycles, Value); // 1 cycle
+    Byte M = FetchByte(Cycles, memory); // 1 cycle
+    ADC(Cycles, M); // 1 cycle
     printf("Handled INS_ADC_IM\n");
    } break;
 
    // ADC Zero Page
    case INS_ADC_ZP: {
-    Byte Value = GetZeroPageAddressValue(Cycles, memory); // 2 cycles, 3 if offset
-    ADC(Cycles, Value); // 1 cycle
+    Byte M = GetZeroPageAddressValue(Cycles, memory); // 2 cycles, 3 if offset
+    ADC(Cycles, M); // 1 cycle
     printf("Handled INS_ADC_ZP\n");
    } break;
 
    // ADC Zero Page X
    case INS_ADC_ZPX: {
-    Byte Value = GetZeroPageAddressValue(Cycles, memory, X); // 2 cycles, 3 if offset
-    ADC(Cycles, Value); // 1 cycle
+    Byte M = GetZeroPageAddressValue(Cycles, memory, X); // 2 cycles, 3 if offset
+    ADC(Cycles, M); // 1 cycle
     printf("Handled INS_ADC_ZPX\n");
    } break;
 
    // ADC Absolute
    case INS_ADC_AB: {
-    Byte Value = GetAbsoluteAddressValue(Cycles, memory); // 3 cycles
+    Byte M = GetAbsoluteAddressValue(Cycles, memory); // 3 cycles
     EatCycles(Cycles, 1); // 1 cycle
-    ADC(Cycles, Value); // 1 cycle
+    ADC(Cycles, M); // 1 cycle
     printf("Handled INS_ADC_AB\n");
    } break;
 
    // ADC Absolute + X
    case INS_ADC_ABX: {
-    Byte Value = GetAbsoluteAddressValue(Cycles, memory, X); // 3 cycles
-    ADC(Cycles, Value); // 1 cycle
+    Byte M = GetAbsoluteAddressValue(Cycles, memory, X); // 3 cycles
+    ADC(Cycles, M); // 1 cycle
     printf("Handled INS_ADC_ABX\n");
    } break;
 
    // ADC Absolute + Y
    case INS_ADC_ABY: {
-    Byte Value = GetAbsoluteAddressValue(Cycles, memory, Y); // 3 cycles
-    ADC(Cycles, Value); // 1 cycle
+    Byte M = GetAbsoluteAddressValue(Cycles, memory, Y); // 3 cycles
+    ADC(Cycles, M); // 1 cycle
     printf("Handled INS_ADC_ABX\n");
    } break;
 
    // ADC (Indirect,X)
    case INS_ADC_INX: {
-    Byte Value = GetIndirectAddressValueX(Cycles, memory); // 4 cycles
-    EatCycles(Cycles, 1); // 1 cycle
-    ADC(Cycles, Value); // 1 cycle
+    Byte M = GetIndirectAddressValueX(Cycles, memory); // 5 cycles
+    ADC(Cycles, M); // 1 cycle
     printf("Handled INS_ADC_INX\n");
    } break;
 
    // ADC (Indirect),Y
    case INS_ADC_INY: {
-    Byte Value = GetIndirectAddressValueY(Cycles, memory); // 4 cycles
-    ADC(Cycles, Value); // 1 cycle
+    Byte M = GetIndirectAddressValueY(Cycles, memory); // 4 cycles
+    ADC(Cycles, M); // 1 cycle
     printf("Handled INS_ADC_INY\n");
    } break;
 
@@ -704,56 +897,58 @@ struct CPU_6502 {
 
    // AND Immediate
    case INS_AND_IM: {
-    Byte Value = FetchByte(Cycles, memory); // 1 cycle
-    AND(Cycles, Value); // 1 cycle
+    Byte M = FetchByte(Cycles, memory); // 1 cycle
+    AND(Cycles, M); // 1 cycle
     printf("Handled INS_AND_IM\n");
    } break;
 
    // AND Zero Page
    case INS_AND_ZP: {
-    Byte Value = GetZeroPageAddressValue(Cycles, memory); // 2 cycles, 3 on offset
-    AND(Cycles, Value); // 1 cycle
+    Byte M = GetZeroPageAddressValue(Cycles, memory); // 2 cycles, 3 on offset
+    AND(Cycles, M); // 1 cycle
     printf("Handled INS_AND_ZP\n");
    } break;
 
    // AND Zero Page X
    case INS_AND_ZPX: {
-    Byte Value = GetZeroPageAddressValue(Cycles, memory, X); // 2 cycles, 3 on offset
-    AND(Cycles, Value); // 1 cycle
+    Byte M = GetZeroPageAddressValue(Cycles, memory, X); // 2 cycles, 3 on offset
+    AND(Cycles, M); // 1 cycle
     printf("Handled INS_AND_ZPX\n");
    } break;
 
    // AND Absolute
    case INS_AND_AB: {
-    Byte Value = GetAbsoluteAddressValue(Cycles, memory); // 3 cycles
-    AND(Cycles, Value); // 1 cycle
+    Byte M = GetAbsoluteAddressValue(Cycles, memory); // 3 cycles
+    AND(Cycles, M); // 1 cycle
     printf("Handled INS_AND_AB\n");
    } break;
 
    // AND Absolute X
    case INS_AND_ABX: {
-    Byte Value = GetAbsoluteAddressValue(Cycles, memory, X); // 3 cycles
-    AND(Cycles, Value); // 1 cycle
-    printf("Handled INS_AND_AB\n");
+    Byte M = GetAbsoluteAddressValue(Cycles, memory, X); // 3 cycles
+    AND(Cycles, M); // 1 cycle
+    printf("Handled INS_AND_ABX\n");
    } break;
 
    // AND Absolute Y
    case INS_AND_ABY: {
-    Byte Value = GetAbsoluteAddressValue(Cycles, memory, Y); // 3 cycles
-    AND(Cycles, Value); // 1 cycle
-    printf("Handled INS_AND_AB\n");
+    Byte M = GetAbsoluteAddressValue(Cycles, memory, Y); // 3 cycles
+    AND(Cycles, M); // 1 cycle
+    printf("Handled INS_AND_ABY\n");
    } break;
 
    // AND (Indirect,X)
    case INS_AND_INX: {
-    Byte Value = GetIndirectAddressValueX(Cycles, memory); // 4 cycles
-    AND(Cycles, Value);
+    Byte M = GetIndirectAddressValueX(Cycles, memory); // 5 cycles
+    AND(Cycles, M);
+    printf("Handled INS_AND_INX\n");
    } break;
 
    // AND (Indirect),Y
    case INS_AND_INY: {
-    Byte Value = GetIndirectAddressValueY(Cycles, memory); // 4 cycles
-    AND(Cycles, Value);
+    Byte M = GetIndirectAddressValueY(Cycles, memory); // 4 cycles
+    AND(Cycles, M);
+    printf("Handled INS_AND_INY\n");
    } break;
 
    // ASL
@@ -768,35 +963,35 @@ struct CPU_6502 {
    // ASL Zero Page
    case INS_ASL_ZP: {
     Byte Address = GetZeroPageAddress(Cycles, memory); // 2 cycles
-    Byte Value = ReadByte(Cycles, Address, memory); // 1 cycle
-    ASL(Cycles, Value); // 1 cycle
-    WriteValueToAddress(Cycles, memory, Address, Value); // 1 cycle
+    Byte M = ReadByte(Cycles, Address, memory); // 1 cycle
+    ASL(Cycles, M); // 1 cycle
+    WriteValueToAddress(Cycles, memory, Address, M); // 1 cycle
     printf("Handled INS_ASL_ZP\n");
    } break;
    // ASL Zero Page X
    case INS_ASL_ZPX: {
     Byte Address = GetZeroPageAddress(Cycles, memory, X); // 3 cycles
-    Byte Value = ReadByte(Cycles, Address, memory); // 1 cycle
-    ASL(Cycles, Value); // 1 cycle
-    WriteValueToAddress(Cycles, memory, Address, Value); // 1 cycle
+    Byte M = ReadByte(Cycles, Address, memory); // 1 cycle
+    ASL(Cycles, M); // 1 cycle
+    WriteValueToAddress(Cycles, memory, Address, M); // 1 cycle
     printf("Handled INS_ASL_ZPX\n");
    } break;
 
    // ASL Absolute
    case INS_ASL_AB: {
     Word Address = GetAbsoluteAddress(Cycles, memory); // 3 cycles
-    Byte Value = ReadByte(Cycles, Address, memory); // 1 cycle
-    ASL(Cycles, Value); // 1 cycle
-    WriteValueToAddress(Cycles, memory, Address, Value); // 1 cycle
+    Byte M = ReadByte(Cycles, Address, memory); // 1 cycle
+    ASL(Cycles, M); // 1 cycle
+    WriteValueToAddress(Cycles, memory, Address, M); // 1 cycle
     printf("Handled INS_ASL_AB\n");
    } break;
 
    // ASL Absolute X
    case INS_ASL_ABX: {
     Word Address = GetAbsoluteAddress(Cycles, memory, X); // 3 cycles
-    Byte Value = ReadByte(Cycles, Address, memory); // 1 cycle
-    ASL(Cycles, Value); // 1 cycle
-    WriteValueToAddress(Cycles, memory, Address, Value); // 1 cycle
+    Byte M = ReadByte(Cycles, Address, memory); // 1 cycle
+    ASL(Cycles, M); // 1 cycle
+    WriteValueToAddress(Cycles, memory, Address, M); // 1 cycle
     EatCycles(Cycles, 1); // 1 cycle
     printf("Handled INS_ASL_ABX\n");
    } break;
@@ -826,91 +1021,627 @@ struct CPU_6502 {
 
    // BIT Zero Page
    case INS_BIT_ZP: {
-    Byte Value = GetZeroPageAddressValue(Cycles, memory);
-    BIT(Cycles, Value);
-   }
-   
+    Byte M = GetZeroPageAddressValue(Cycles, memory);
+    BIT(Cycles, M);
+    printf("Handled INS_BIT_ZP\n");
+   } break;
+
    // BIT Absolute
    case INS_BIT_AB: {
-    Byte Value = GetAbsoluteAddressValue(Cycles, memory);
-    BIT(Cycles, Value);
-   }
-   
+    Byte M = GetAbsoluteAddressValue(Cycles, memory);
+    BIT(Cycles, M);
+    printf("Handled INS_BIT_AB\n");
+   } break;
+
    // BMI Relative
    case INS_BMI_REL: {
     Byte Offset = FetchByte(Cycles, memory);
     BMI(Cycles, Offset);
-    printf("Handled INS_BCS_REL\n");
+    printf("Handled INS_BMI_REL\n");
    } break;
 
    // BNE Relative
    case INS_BNE_REL: {
     Byte Offset = FetchByte(Cycles, memory);
     BNE(Cycles, Offset);
-    printf("Handled INS_BCS_REL\n");
+    printf("Handled INS_BNE_REL\n");
    } break;
 
    // BPL Relative
    case INS_BPL_REL: {
     Byte Offset = FetchByte(Cycles, memory);
     BPL(Cycles, Offset);
-    printf("Handled INS_BCS_REL\n");
+    printf("Handled INS_BPL_REL\n");
    } break;
 
    // BRK Implied
    case INS_BRK_IMPL: {
     BRK(Cycles, memory);
+    printf("Handled INS_BRK_REL\n");
    } break;
 
    // BVC Relative
    case INS_BVC_REL: {
     Byte Offset = FetchByte(Cycles, memory);
     BVC(Cycles, Offset);
-    printf("Handled INS_BCS_REL\n");
+    printf("Handled INS_BVC_REL\n");
    } break;
 
    // BVS Relative
    case INS_BVS_REL: {
     Byte Offset = FetchByte(Cycles, memory);
     BVS(Cycles, Offset);
-    printf("Handled INS_BCS_REL\n");
+    printf("Handled INS_BVS_REL\n");
    } break;
 
    // CLC Implied
    case INS_CLC_IMPL: {
     CLC(Cycles);
+    printf("Handled INS_CLC_IMPL\n");
    } break;
 
    // CLD Implied
    case INS_CLD_IMPL: {
     CLD(Cycles);
+    printf("Handled INS_CLD_IMPL\n");
    } break;
 
    // CLC Implied
    case INS_CLI_IMPL: {
     CLI(Cycles);
+    printf("Handled INS_CLI_IMPL\n");
    } break;
 
    // CLC Implied
    case INS_CLV_IMPL: {
     CLV(Cycles);
+    printf("Handled INS_CLV_IMPL\n");
    } break;
 
-   // JMP Absolute
+   // CMP Immediate
+   case INS_CMP_IM: {
+    Byte M = FetchByte(Cycles, memory); // 1 cycle
+    CMP(Cycles, M); // 1 cycle
+    printf("Handled INS_CMP_IM\n");
+   } break;
+
+   // CMP Zero Page
+   case INS_CMP_ZP: {
+    Byte M = GetZeroPageAddressValue(Cycles, memory); // 2 cycles
+    CMP(Cycles, M); // 1 cycle
+    printf("Handled INS_CMP_ZP\n");
+   } break;
+
+   // CMP Zero Page
+   case INS_CMP_ZPX: {
+    Byte M = GetZeroPageAddressValue(Cycles, memory, X); // 3 cycles
+    CMP(Cycles, M); // 1 cycle
+    printf("Handled INS_CMP_ZPX\n");
+   } break;
+
+   // CMP Absolute
+   case INS_CMP_AB: {
+    Byte M = GetAbsoluteAddressValue(Cycles, memory); // 3 cycles
+    CMP(Cycles, M); // 1 cycle
+    printf("Handled INS_CMP_AB\n");
+   } break;
+
+   // CMP Absolute X
+   case INS_CMP_ABX: {
+    Byte M = GetAbsoluteAddressValue(Cycles, memory, X); // 3 cycles, 4 on crossing
+    CMP(Cycles, M); // 1 cycle
+    printf("Handled INS_CMP_ABX\n");
+   } break;
+
+   // CMP Absolute Y
+   case INS_CMP_ABY: {
+    Byte M = GetAbsoluteAddressValue(Cycles, memory, Y); // 3 cycles, 4 on crossing
+    CMP(Cycles, M); // 1 cycle
+    printf("Handled INS_CMP_ABY\n");
+   } break;
+
+   case INS_CMP_INX: {
+    Byte M = GetIndirectAddressValueX(Cycles, memory); // 5 cycles
+    CMP(Cycles, M); // 1 cycle
+    printf("Handled INS_CMP_INX\n");
+   } break;
+
+   case INS_CMP_INY: {
+    Byte M = GetIndirectAddressValueY(Cycles, memory); // 4 cycles, 5 on cross
+    CMP(Cycles, M);
+    printf("Handled INS_CMP_INX\n");
+   } break;
+
+   // CPX Immediate
+   case INS_CPX_IM: {
+    Byte M = FetchByte(Cycles, memory); // 1 cycle
+    CPX(Cycles, M); // 1 cycle
+    printf("Handled INS_CPX_IM\n");
+   } break;
+
+   // CPX Zero Page
+   case INS_CPX_ZP: {
+    Byte M = GetZeroPageAddressValue(Cycles, memory); // 2 cycles
+    CPX(Cycles, M); // 1 cycle
+    printf("Handled INS_CPX_ZP\n");
+   } break;
+
+   // CPX Absolute
+   case INS_CPX_AB: {
+    Byte M = GetAbsoluteAddressValue(Cycles, memory); // 3 cycles
+    CPX(Cycles, M); // 1 cycle
+    printf("Handled INS_CPX_AB\n");
+   } break;
+
+   // CPY Immediate (хахаха)
+   case INS_CPY_IM: {
+    Byte M = FetchByte(Cycles, memory); // 1 cycle
+    CPY(Cycles, M); // 1 cycle
+    printf("Handled INS_CPY_IM\n");
+   } break;
+
+   // CPY Zero Page
+   case INS_CPY_ZP: {
+    Byte M = GetZeroPageAddressValue(Cycles, memory); // 2 cycles
+    CPY(Cycles, M); // 1 cycle
+    printf("Handled INS_CPY_ZP\n");
+   } break;
+
+   // CPY Absolute
+   case INS_CPY_AB: {
+    Byte M = GetAbsoluteAddressValue(Cycles, memory); // 3 cycles
+    CPY(Cycles, M); // 1 cycle
+    printf("Handled INS_CPY_AB\n");
+   } break;
+
+   case INS_DEC_ZP: {
+    Byte Address = GetZeroPageAddress(Cycles, memory); // 1 cycle
+    Byte M = ReadByte(Cycles, Address, memory); // 1 cycle
+    DEC(Cycles, M); // 2 cycles
+    WriteValueToAddress(Cycles, memory, Address, M); // 1 cycle
+    printf("Handled INS_DEC_ZP\n");
+   } break;
+
+   case INS_DEC_ZPX: {
+    Byte Address = GetZeroPageAddress(Cycles, memory, X); // 2 cycle
+    Byte M = ReadByte(Cycles, Address, memory); // 1 cycle
+    DEC(Cycles, M); // 2 cycles
+    WriteValueToAddress(Cycles, memory, Address, M); // 1 cycle
+    printf("Handled INS_DEC_ZPX\n");
+   } break;
+
+   case INS_DEC_AB: {
+    Word Address = GetAbsoluteAddress(Cycles, memory); // 2 cycles
+    Byte M = ReadByte(Cycles, Address, memory); // 1 cycle
+    DEC(Cycles, M); // 2 cycles
+    WriteValueToAddress(Cycles, memory, Address, M); // 1 cycle
+    printf("Handled INS_DEC_AB\n");
+   } break;
+
+   case INS_DEC_ABX: {
+    Word Address = GetAbsoluteAddress(Cycles, memory, X); // 3 cycles
+    Byte M = ReadByte(Cycles, Address, memory); // 1 cycle
+    DEC(Cycles, M); // 2 cycles
+    WriteValueToAddress(Cycles, memory, Address, M); // 1 cycle
+    printf("Handled INS_DEC_ABX\n");
+   } break;
+
+   case INS_DEX_IMPL: {
+    DEX(Cycles); // 2 cycles
+    printf("Handled INS_DEX_IMPL\n");
+   } break;
+
+   case INS_DEY_IMPL: {
+    DEY(Cycles); // 2 cycles
+    printf("Handled INS_DEX_IMPL\n");
+   } break;
+
+   case INS_EOR_IM: {
+    Byte M = FetchByte(Cycles, memory); // 1 cycle
+    EOR(Cycles, M); // 1 cycle
+    printf("Handled INS_EOR_IM\n");
+   } break;
+
+   case INS_EOR_ZP: {
+    Byte M = GetZeroPageAddressValue(Cycles, memory);
+    EOR(Cycles, M); // 1 cycle
+    printf("Handled INS_EOR_ZP\n");
+   } break;
+
+   case INS_EOR_ZPX: {
+    Byte M = GetZeroPageAddressValue(Cycles, memory, X);
+    EOR(Cycles, M); // 1 cycle
+    printf("Handled INS_EOR_ZPX\n");
+   } break;
+
+   case INS_EOR_AB: {
+    Byte M = GetAbsoluteAddressValue(Cycles, memory); // 3 cycles
+    EOR(Cycles, M); // 1 cycle
+    printf("Handled INS_EOR_AB\n");
+   } break;
+
+   case INS_EOR_ABX: {
+    Byte M = GetAbsoluteAddressValue(Cycles, memory, X); // 4 cycles
+    EOR(Cycles, M); // 1 cycle
+    printf("Handled INS_EOR_ABX\n");
+   } break;
+
+   case INS_EOR_ABY: {
+    Byte M = GetAbsoluteAddressValue(Cycles, memory, Y); // 4 cycles
+    EOR(Cycles, M); // 1 cycle
+    printf("Handled INS_EOR_ABY\n");
+   } break;
+
+   case INS_EOR_INX: {
+    Byte M = GetIndirectAddressValueX(Cycles, memory); // 5 cycles
+    EOR(Cycles, M); // 1 cycle
+    printf("Handled INS_EOR_INX\n");
+   } break;
+
+   case INS_EOR_INY: {
+    Byte M = GetIndirectAddressValueY(Cycles, memory); // 4 cycles
+    EOR(Cycles, M); // 1 cycle
+    printf("Handled INS_EOR_INY\n");
+   } break;
+
+   case INS_INC_ZP: {
+    Byte Address = GetZeroPageAddress(Cycles, memory); // 1 cycle
+    Byte M = ReadByte(Cycles, Address, memory); // 1 cycle
+    INC(Cycles, M); // 2 cycles
+    WriteValueToAddress(Cycles, memory, Address, M); // 1 cycle
+    printf("Handled INS_DEC_ZP\n");
+   } break;
+
+   case INS_INC_ZPX: {
+    Byte Address = GetZeroPageAddress(Cycles, memory, X); // 2 cycle
+    Byte M = ReadByte(Cycles, Address, memory); // 1 cycle
+    INC(Cycles, M); // 2 cycles
+    WriteValueToAddress(Cycles, memory, Address, M); // 1 cycle
+    printf("Handled INS_DEC_ZPX\n");
+   } break;
+
+   case INS_INC_AB: {
+    Word Address = GetAbsoluteAddress(Cycles, memory); // 2 cycles
+    Byte M = ReadByte(Cycles, Address, memory); // 1 cycle
+    INC(Cycles, M); // 2 cycles
+    WriteValueToAddress(Cycles, memory, Address, M); // 1 cycle
+    printf("Handled INS_DEC_AB\n");
+   } break;
+
+   case INS_INC_ABX: {
+    Word Address = GetAbsoluteAddress(Cycles, memory, X); // 3 cycles
+    Byte M = ReadByte(Cycles, Address, memory); // 1 cycle
+    INC(Cycles, M); // 2 cycles
+    WriteValueToAddress(Cycles, memory, Address, M); // 1 cycle
+    printf("Handled INS_DEC_ABX\n");
+   } break;
+
+   case INS_INX_IMPL: {
+    INX(Cycles); // 2 cycles
+    printf("Handled INS_INX_IMPL\n");
+   } break;
+
+   case INS_INY_IMPL: {
+    INY(Cycles); // 2 cycles
+    printf("Handled INS_INY_IMPL\n");
+   } break;
+
    case INS_JMP_AB: {
-    PC = FetchWord(Cycles, memory); // 2 cycles
-    EatCycles(Cycles, 1); // 1 cycle
+    Word Address = GetAbsoluteAddress(Cycles, memory); // 2 cycles
+    JMP(Cycles, Address); // 3 cycles
     printf("Handled INS_JMP_AB\n");
    } break;
 
-   case INS_STA_AB: {
-    Word Address = FetchWord(Cycles, memory);
+   case INS_JSR_AB: {
+    Word Address = GetAbsoluteAddress(Cycles, memory); // 2 cycles
+    JSR(Cycles, memory, Address); // 4 cycles
+    printf("Handled INS_JSR_AB\n");
+   } break;
 
-    memory[Address] = A;
+   case INS_LDA_IM: {
+    Byte M = FetchByte(Cycles, memory); // 1 cycle
+    LDA(Cycles, M); // 1 cycle
+    printf("Handled INS_LDA_IM\n");
+   } break;
 
-    EatCycles(Cycles, 2);
+   case INS_LDA_ZP: {
+    Byte M = GetZeroPageAddressValue(Cycles, memory); // 2 cycles
+    LDA(Cycles, M); // 1 cycle
+    printf("Handled INS_LDA_ZP\n");
+   } break;
 
-    printf("Handled INS_STX_AB\n");
+   case INS_LDA_ZPX: {
+    Byte M = GetZeroPageAddressValue(Cycles, memory, X); // 3 cycles
+    LDA(Cycles, M); // 1 cycle
+    printf("Handled INS_LDA_ZPX\n");
+   } break;
+
+   case INS_LDA_AB: {
+    Byte M = GetAbsoluteAddressValue(Cycles, memory); // 3 cycles
+    LDA(Cycles, M); // 1 cycle
+    printf("Handled INS_LDA_AB\n");
+   } break;
+
+   case INS_LDA_ABX: {
+    Byte M = GetAbsoluteAddressValue(Cycles, memory, X); // 3 cycles
+    LDA(Cycles, M); // 1 cycle
+    printf("Handled INS_LDA_ABX\n");
+   } break;
+
+   case INS_LDA_ABY: {
+    Byte M = GetAbsoluteAddressValue(Cycles, memory, Y); // 3 cycles
+    LDA(Cycles, M); // 1 cycle
+    printf("Handled INS_LDA_ABY\n");
+   } break;
+
+   case INS_LDA_INX: {
+    Byte M = GetIndirectAddressValueX(Cycles, memory); // 5 cycles
+    LDA(Cycles, M); // 1 cycle
+    printf("Handled INS_LDA_INX\n");
+   } break;
+
+   case INS_LDA_INY: {
+    Byte M = GetIndirectAddressValueY(Cycles, memory); // 4 cycles
+    LDA(Cycles, M); // 1 cycle
+    printf("Handled INS_LDA_INY\n");
+   } break;
+
+   case INS_LDX_IM: {
+    Byte M = FetchByte(Cycles, memory); // 1 cycle
+    LDX(Cycles, M); // 1 cycle
+    printf("Handled INS_LDX_IM\n");
+   } break;
+
+   case INS_LDX_ZP: {
+    Byte M = GetZeroPageAddressValue(Cycles, memory); // 2 cycles
+    LDX(Cycles, M); // 1 cycle
+    printf("Handled INS_LDX_ZP\n");
+   } break;
+
+   case INS_LDX_ZPY: {
+    Byte M = GetZeroPageAddressValue(Cycles, memory, Y); // 3 cycles
+    LDX(Cycles, M); // 1 cycle
+    printf("Handled INS_LDX_ZPY\n");
+   } break;
+
+   case INS_LDX_AB: {
+    Byte M = GetAbsoluteAddressValue(Cycles, memory); // 3 cycles
+    LDX(Cycles, M); // 1 cycle
+    printf("Handled INS_LDX_AB\n");
+   } break;
+
+   case INS_LDX_ABY: {
+    Byte M = GetAbsoluteAddressValue(Cycles, memory, Y); // 3 cycles
+    LDX(Cycles, M); // 1 cycle
+    printf("Handled INS_LDX_ABY\n");
+   } break;
+
+   case INS_LDY_IM: {
+    Byte M = FetchByte(Cycles, memory); // 1 cycle
+    LDY(Cycles, M); // 1 cycle
+    printf("Handled INS_LDY_IM\n");
+   } break;
+
+   case INS_LDY_ZP: {
+    Byte M = GetZeroPageAddressValue(Cycles, memory); // 2 cycles
+    LDX(Cycles, M); // 1 cycle
+    printf("Handled INS_LDY_ZP\n");
+   } break;
+
+   case INS_LDY_ZPX: {
+    Byte M = GetZeroPageAddressValue(Cycles, memory, X); // 3 cycles
+    LDX(Cycles, M); // 1 cycle
+    printf("Handled INS_LDY_ZPX\n");
+   } break;
+
+   case INS_LDY_AB: {
+    Byte M = GetAbsoluteAddressValue(Cycles, memory); // 3 cycles
+    LDX(Cycles, M); // 1 cycle
+    printf("Handled INS_LDY_AB\n");
+   } break;
+
+   case INS_LDY_ABX: {
+    Byte M = GetAbsoluteAddressValue(Cycles, memory, X); // 3 cycles
+    LDX(Cycles, M); // 1 cycle
+    printf("Handled INS_LDY_ABX\n");
+   } break;
+
+   case INS_LSR_A: {
+    LSR(Cycles, A); // 1 cycle
+    EatCycles(Cycles, 1);
+    printf("Handled INS_LSR_A\n");
+   } break;
+
+   case INS_LSR_ZP: {
+    Word Address = GetZeroPageAddress(Cycles, memory); // 2 Cycles
+    Byte M = ReadByte(Cycles, Address, memory); // 1 cycle
+    LSR(Cycles, M); // 1 cycle
+    WriteValueToAddress(Cycles, memory, Address, M); // 1 cycle
+    printf("Handled INS_LSR_ZP\n");
+   } break;
+
+   case INS_LSR_ZPX: {
+    Word Address = GetZeroPageAddress(Cycles, memory, X); // 3 Cycles
+    Byte M = ReadByte(Cycles, Address, memory); // 1 cycle
+    LSR(Cycles, M); // 1 cycle
+    WriteValueToAddress(Cycles, memory, Address, M); // 1 cycle
+    printf("Handled INS_LSR_ZPX\n");
+   } break;
+
+   case INS_LSR_AB: {
+    Word Address = GetAbsoluteAddress(Cycles, memory); // 3 Cycles
+    Byte M = ReadByte(Cycles, Address, memory); // 1 cycle
+    LSR(Cycles, M); // 1 cycle
+    WriteValueToAddress(Cycles, memory, Address, M); // 1 cycle
+    printf("Handled INS_LSR_AB\n");
+   } break;
+
+   case INS_LSR_ABX: {
+    Word Address = GetAbsoluteAddress(Cycles, memory, X); // 3 Cycles
+    Byte M = ReadByte(Cycles, Address, memory); // 1 cycle
+    LSR(Cycles, M); // 1 cycle
+    WriteValueToAddress(Cycles, memory, Address, M); // 1 cycle
+    printf("Handled INS_LSR_ABX\n");
+   } break;
+
+   case INS_NOP_IMPL: {
+    NOP(Cycles);
+    printf("Handled INS_NOP_IMPL\n");
+   } break;
+
+   case INS_ORA_IM: {
+    Byte M = FetchByte(Cycles, memory); // 1 cycle
+    ORA(Cycles, M); // 1 cycle
+    printf("Handled INS_ORA_IM\n");
+   } break;
+
+   case INS_ORA_ZP: {
+    Byte M = GetZeroPageAddressValue(Cycles, memory); // 2 cycles
+    ORA(Cycles, M); // 1 cycle
+    printf("Handled INS_ORA_ZP\n");
+   } break;
+
+   case INS_ORA_ZPX: {
+    Byte M = GetZeroPageAddressValue(Cycles, memory, X); // 3 cycles
+    ORA(Cycles, M); // 1 cycle
+    printf("Handled INS_ORA_ZPX\n");
+   } break;
+
+   case INS_ORA_AB: {
+    Byte M = GetAbsoluteAddressValue(Cycles, memory); // 3 cycles
+    ORA(Cycles, M);
+    printf("Handled INS_ORA_AB\n");
+   } break;
+
+   case INS_ORA_ABX: {
+    Byte M = GetAbsoluteAddressValue(Cycles, memory, X); // 3 cycles
+    ORA(Cycles, M); // 1
+    printf("Handled INS_ORA_ABX\n");
+   } break;
+
+   case INS_ORA_ABY: {
+    Byte M = GetAbsoluteAddressValue(Cycles, memory, Y); // 3 cycles
+    ORA(Cycles, M); // 1
+    printf("Handled INS_ORA_ABY\n");
+   } break;
+
+   case INS_ORA_INX: {
+    Byte M = GetIndirectAddressValueX(Cycles, memory);
+    ORA(Cycles, M);
+    printf("Handled INS_ORA_INX\n");
+   } break;
+
+   case INS_ORA_INY: {
+    Byte M = GetIndirectAddressValueY(Cycles, memory);
+    ORA(Cycles, M);
+    printf("Handled INS_ORA_INY\n");
+   } break;
+
+   case INS_PHA_IMPL: {
+    PHA(Cycles, memory);
+    EatCycles(Cycles, 1);
+    printf("Handled INS_PHA_IMPL\n");
+   } break;
+
+   case INS_PHP_IMPL: {
+    PHP(Cycles, memory);
+    EatCycles(Cycles, 1);
+    printf("Handled INS_PHP_IMPL\n");
+   }
+
+   case INS_PLA_IMPL: {
+    PLA(Cycles, memory);
+    EatCycles(Cycles, 1);
+    printf("Handled INS_PLA_IMPL\n");
+   }
+
+   case INS_PLP_IMPL: {
+    PLP(Cycles, memory);
+    EatCycles(Cycles, 1);
+    printf("Handled INS_PLP_IMPL\n");
+   }
+
+   case INS_ROL_A: {
+    ROL(Cycles, A);
+    printf("Handled INS_ROL_A\n");
+   }
+
+   case INS_ROL_ZP: {
+    Byte ZeroPageAddress = GetZeroPageAddress(Cycles, memory);
+    Byte M = ReadByte(Cycles, ZeroPageAddress, memory);
+    ROL(Cycles, M);
+    WriteValueToAddress(Cycles, memory, ZeroPageAddress, M);
+    printf("Handled INS_ROL_ZP\n");
+   }
+
+   case INS_ROL_ZPX: {
+    Byte ZeroPageAddress = GetZeroPageAddress(Cycles, memory, X);
+    Byte M = ReadByte(Cycles, ZeroPageAddress, memory);
+    ROL(Cycles, M);
+    WriteValueToAddress(Cycles, memory, ZeroPageAddress, M);
+    printf("Handled INS_ROL_ZPX\n");
+   }
+
+   case INS_ROL_AB: {
+    Byte Address = GetAbsoluteAddress(Cycles, memory);
+    Byte M = ReadByte(Cycles, Address, memory);
+    ROL(Cycles, M);
+    WriteValueToAddress(Cycles, memory, Address, M);
+    printf("Handled INS_ROL_AB\n");
+   }
+
+   case INS_ROL_ABX: {
+    Byte Address = GetAbsoluteAddress(Cycles, memory, X);
+    Byte M = ReadByte(Cycles, Address, memory);
+    ROL(Cycles, M);
+    WriteValueToAddress(Cycles, memory, Address, M);
+    printf("Handled INS_ROL_ABX\n");
+   }
+
+  case INS_ROR_A: {
+    ROR(Cycles, A);
+    printf("Handled INS_ROR_A\n");
+   }
+
+   case INS_ROR_ZP: {
+    Byte ZeroPageAddress = GetZeroPageAddress(Cycles, memory);
+    Byte M = ReadByte(Cycles, ZeroPageAddress, memory);
+    ROR(Cycles, M);
+    WriteValueToAddress(Cycles, memory, ZeroPageAddress, M);
+    printf("Handled INS_ROR_ZP\n");
+   }
+
+   case INS_ROR_ZPX: {
+    Byte ZeroPageAddress = GetZeroPageAddress(Cycles, memory, X);
+    Byte M = ReadByte(Cycles, ZeroPageAddress, memory);
+    ROR(Cycles, M);
+    WriteValueToAddress(Cycles, memory, ZeroPageAddress, M);
+    printf("Handled INS_ROR_ZPX\n");
+   }
+
+   case INS_ROR_AB: {
+    Byte Address = GetAbsoluteAddress(Cycles, memory);
+    Byte M = ReadByte(Cycles, Address, memory);
+    ROR(Cycles, M);
+    WriteValueToAddress(Cycles, memory, Address, M);
+    printf("Handled INS_ROR_AB\n");
+   }
+
+   case INS_ROR_ABX: {
+    Byte Address = GetAbsoluteAddress(Cycles, memory, X);
+    Byte M = ReadByte(Cycles, Address, memory);
+    ROR(Cycles, M);
+    WriteValueToAddress(Cycles, memory, Address, M);
+    printf("Handled INS_ROR_ABX\n");
+   }
+
+   case INS_RTI_IMPL: {
+    RTI(Cycles, memory);
+    printf("Handled INS_RTI_IMPL\n");
+   }
+
+   case INS_JMP_IN: {
+    printf("Unable to handle indirect JMP\n");
    } break;
 
    default: {
@@ -926,10 +1657,11 @@ int main() {
  Memory mem;
  CPU_6502 cpu;
  cpu.Reset(mem, 0x0);
- mem[0x0] = CPU_6502::INS_BCC_REL;
- mem[0x0001] = 0x55;
- mem[0x0055] = CPU_6502::INS_JMP_AB;
-
+ mem[0x0] = CPU_6502::INS_LDX_IM;
+ mem[0x0001] = 0x00;
+ mem[0x0002] = CPU_6502::INS_LDA_IM;
+ mem[0x0003] = 0x03;
+ mem[0x0004] = CPU_6502::INS_JMP_AB;
 
  cpu.Execute(15, mem);
  mem.PrintRange(0x0000, 0x0100);
