@@ -1,5 +1,5 @@
-bin-6502
-bin-6502-debug
+emulator
+program.bin
 
 # Prerequisites
 *.d

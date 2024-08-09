@@ -4,14 +4,14 @@
 #define MAX_MEM 1024 * 64
 
 #include "common.h"
-#include <stdint.h>
-#include <stdio.h>
+#include <fstream>
+
 
 struct Memory {
  Byte Data[MAX_MEM];
 
  void Init();
- void ReadBin(FILE* fp);
+ void Read(std::fstream& program);
  void PrintRange(Word addr, Word end);
 
  Byte operator[](Word Address) const { return Data[Address]; }

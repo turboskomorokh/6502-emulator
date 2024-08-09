@@ -17,13 +17,13 @@ struct CPUFlags {
 
 struct CPU_6502 {
  Word PC; // Program Counter
- Word SP; // Stack pointer
+ Byte SP; // Stack pointer
 
  Byte A, X, Y; // registers, accumulator, x, y
 
  CPUFlags Flag;
 
- enum INSTRUCTIONS {
+ static constexpr Byte
 
   // LOAD INSTRUCTIONS
 
@@ -229,8 +229,7 @@ struct CPU_6502 {
   // SYSTEM INSTRUCTIONS
   INS_BRK_IMPL = 0x00, //    1       7
   INS_NOP_IMPL = 0xEA, //    1       2
-  INS_RTI_IMPL = 0x40, //    1       6
- };
+  INS_RTI_IMPL = 0x40; //    1       6
 
  // Internal cycles: 0
  void ADC(Byte M);
@@ -336,7 +335,7 @@ struct CPU_6502 {
  void PrintFlags();
  void PrintRegisters();
 
- void Reset(Memory& mem, Word ResetAddress /* Something about debug purposes */);
+ void Reset(Memory& mem);
  void Execute(uint32_t Cycles, Memory& memory);
 
  void EatCycles(uint32_t& Cycles, uint32_t amount /* amount of cycles to consume */);
@@ -356,8 +355,8 @@ struct CPU_6502 {
  Byte ReadByte(uint32_t& Cycles, Word Address, Memory& Memory);
  Word ReadWord(uint32_t& Cycles, Word Address, Memory& Memory);
 
- Byte FetchZeroPageAddress(uint32_t& Cycles, Memory& Memory, Byte offset = 0x00);
- Word FetchAbsoluteAddress(uint32_t& Cycles, Memory& Memory, Byte Offset = 0x00);
+ Byte FetchZeroPageAddress(uint32_t& Cycles, Memory& Memory, Byte offset);
+ Word FetchAbsoluteAddress(uint32_t& Cycles, Memory& Memory, Byte Offset);
 
  Word FetchIndirectAddressX(uint32_t& Cycles, Memory& memory);
  Word FetchIndirectAddressY(uint32_t& Cycles, Memory& memory);

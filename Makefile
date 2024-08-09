@@ -1,9 +1,20 @@
-all:
-	@echo "  CPP  bin-6502"
-	g++ src/*.cpp -o bin-6502
-	@echo "  CPPD bin-6502-debug"
-	g++ -pg src/*.cpp -o bin-6502-debug
+CPP = g++
+BIN = emulator
+
+SOURCES = $(wildcard src/*.cpp)
+OBJECTS = $(SOURCES:.cpp=.o)
+
+all: $(BIN)
+
+$(BIN): $(OBJECTS)
+	@echo "  LD     $@"
+	@$(CPP) -o $@ $(OBJECTS)
+
+%.o: %.cpp
+	@echo "  CPP    $@"
+	@$(CPP) -c $< -o $@
 
 clean:
-	@echo " CLEAR bin-6502 bin-6502-debug gmon.out"
-	@rm -rf bin-6502 bin-6502-debug gmon.out
+	@echo "  RM     $(OBJECTS) $(BIN)"
+	@rm -f $(OBJECTS) $(BIN)
+

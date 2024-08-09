@@ -3,9 +3,10 @@
 #include <stdint.h>
 
 void CPU_6502::ADC(Byte M) {
- Word Sum = A + M + Flag.C;
+ Word Sum = (Word)A + (Word)M + (Word)Flag.C;
 
  Flag.C   = (Sum > 0xFF);
+ A        = (Byte)Sum;
  Flag.Z   = (A == 0);
  Flag.N   = (A & 0x80);
  Flag.O   = (((A ^ M) & (A ^ Sum)) & 0x80);
@@ -223,7 +224,7 @@ void CPU_6502::INY(uint32_t& Cycles) {
 void CPU_6502::JMP(Word Address) { PC = Address; }
 
 void CPU_6502::JSR(uint32_t& Cycles, Memory& memory, Word Address) {
- StackPushWord(Cycles, memory, PC + 2);
+ StackPushWord(Cycles, memory, PC);
  PC = Address;
  EatCycles(Cycles, 1);
 }
@@ -237,7 +238,7 @@ void CPU_6502::LDY(Byte M) { Y = M; }
 void CPU_6502::LSR(uint32_t& Cycles, Byte& Dest) {
  EatCycles(Cycles, 1);
  Flag.C = (Dest & 0x80);
- Dest <<= 1;
+ Dest >>= 1;
  Flag.Z = (Dest == 0);
  Flag.N = (Dest & 0x80);
 }
@@ -310,46 +311,43 @@ void CPU_6502::RTI(uint32_t& Cycles, Memory& memory) {
 
 void CPU_6502::RTS(uint32_t& Cycles, Memory& memory) {
  Word StackPC = StackPullWord(Cycles, memory);
- PC           = StackPC + 1;
+ PC           = StackPC;
  EatCycles(Cycles, 3);
 }
 
 void CPU_6502::SBC(Byte M) {
- Word Sub = A - M - (1 - Flag.C);
+ printf("A: 0x%02x, M: 0x%02x, C: 0x%02x", A, M, Flag.C);   
+ Word Sub = (Word)A - (Word)M - (Word)(1 - Flag.C);
 
+ Flag.C   = (Sub >= 0x100);
  A        = (Byte)Sub;
- Flag.C   = (Sub > 0xFF);
+ printf("Res: 0x%04x ", Sub);
+
  Flag.Z   = (A == 0);
  Flag.N   = (A & 0x80);
- Flag.O   = (((A ^ M) & (A ^ Sub)) & 0x80);
+ Flag.O   = (((A ^ M) & (A ^ (Byte)Sub)) & 0x80) != 0;
 }
 
 void CPU_6502::SEC(uint32_t& Cycles) {
  EatCycles(Cycles, 1);
- Flag.C = 0x00;
+ Flag.C = true;
 }
 
 void CPU_6502::SED(uint32_t& Cycles) {
  EatCycles(Cycles, 1);
- Flag.D = 0x00;
+ Flag.D = true;
 }
 
 void CPU_6502::SEI(uint32_t& Cycles) {
  EatCycles(Cycles, 1);
- Flag.I = 0x00;
+ Flag.I = true;
 }
 
-void CPU_6502::STA(uint32_t& Cycles, Memory& memory, Word Address) {
- WriteValueToAddress(Cycles, memory, Address, A);
-}
+void CPU_6502::STA(uint32_t& Cycles, Memory& memory, Word Address) { WriteValueToAddress(Cycles, memory, Address, A); }
 
-void CPU_6502::STX(uint32_t& Cycles, Memory& memory, Word Address) {
- WriteValueToAddress(Cycles, memory, Address, X);
-}
+void CPU_6502::STX(uint32_t& Cycles, Memory& memory, Word Address) { WriteValueToAddress(Cycles, memory, Address, X); }
 
-void CPU_6502::STY(uint32_t& Cycles, Memory& memory, Word Address) {
- WriteValueToAddress(Cycles, memory, Address, Y);
-}
+void CPU_6502::STY(uint32_t& Cycles, Memory& memory, Word Address) { WriteValueToAddress(Cycles, memory, Address, Y); }
 
 void CPU_6502::TAX(uint32_t& Cycles) {
  EatCycles(Cycles, 1);

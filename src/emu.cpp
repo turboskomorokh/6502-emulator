@@ -1,18 +1,24 @@
-#include <stdlib.h>
+#include <fstream>
+#include <string>
 
 #include "memory.h"
 #include "cpu_6502.h"
 
-int main() {
+using std::fstream, std::ios;
+
+int main(int argc, char **argv) {
  Memory mem;
  CPU_6502 cpu;
- cpu.Reset(mem, 0x0);
- FILE* fp = fopen("a.out", "rb");
- mem.ReadBin(fp);
- free(fp);
+ cpu.Reset(mem);
+ 
+ fstream program(argv[1], ios::binary | ios::in);
+ mem.Read(program);
 
- cpu.Execute(20, mem);
- mem.PrintRange(0x0000, 0x0050);
+ cpu.Execute(std::stoi((std::string)argv[2]), mem);
+ mem.PrintRange(0x0100, 0x0200);
+ mem.PrintRange(0x2000, 0x2020);
+ mem.PrintRange(0x8000, 0x8020);
+ mem.PrintRange(0xFFFA, 0xFFFF);
  cpu.PrintFlags();
  cpu.PrintRegisters();
  return 0;

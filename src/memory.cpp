@@ -1,5 +1,6 @@
+#include <cstdint>
+#include <fstream>
 #include <stdint.h>
-#include <stdio.h>
 
 #include "common.h"
 #include "memory.h"
@@ -10,32 +11,26 @@ void Memory::Init() {
  }
 }
 
-void Memory::ReadBin(FILE* fp) {
+void Memory::Read(std::fstream& program) {
  char ch;
  uint32_t Addr = 0;
- while ((ch = fgetc(fp)) != EOF || Addr > MAX_MEM) {
-  Data[Addr] = ch;
-  Addr++;
+ while (Addr < MAX_MEM && program.get(ch)) {
+  Data[Addr++] = ch;
  }
 }
 
 void Memory::PrintRange(Word addr, Word end) {
- printf("\nMemory dump 0x%04x-0x%04x:\n", addr, end);
+    printf("\nMemory dump 0x%04x-0x%04x:\n", addr, end);
 
- printf("0x%04x ", addr);
- while (addr <= end) {
-  printf("0x%02x", Data[addr]);
-
-  if ((addr + 1) % 8 == 0) {
-   printf("\n");
-   if (addr + 1 <= end) {
-    printf("0x%04x ", addr + 1);
-   }
-  } else {
-   printf(" ");
-  }
-  addr++;
- }
- printf("\n");
+    for (size_t i = addr; i < end; i += 8) {
+        printf("0x%04zx ", i);
+        for (size_t j = 0; j < 8; ++j) {
+            if (i + j <= end) {
+                printf("0x%02x ", Data[i + j]);
+            } else {
+                printf("   ");
+            }
+        }
+        printf("\n");
+    }
 }
-
