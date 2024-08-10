@@ -8,22 +8,22 @@ void CPU_6502::ADC(Byte M) {
  Flag.C   = (Sum > 0xFF);
  A        = (Byte)Sum;
  Flag.Z   = (A == 0);
- Flag.N   = (A & 0x80);
- Flag.O   = (((A ^ M) & (A ^ Sum)) & 0x80);
+ Flag.N   = (A & 0x80) != 0;
+ Flag.O   = (((A ^ M) & (A ^ Sum)) & 0x80) != 0;
 }
 
 void CPU_6502::AND(Byte M) {
  A &= M;
  Flag.Z = (A == 0);
- Flag.N = (A & 0x80);
+ Flag.N = (A & 0x80) != 0;
 }
 
 void CPU_6502::ASL(uint32_t& Cycles, Byte& Dest) {
  EatCycles(Cycles, 1);
- Flag.C = (Dest & 0x80);
+ Flag.C = (Dest & 0x80) != 0;
  Dest <<= 1;
  Flag.Z = (Dest == 0);
- Flag.N = (Dest & 0x80);
+ Flag.N = (Dest & 0x80) != 0;
 }
 
 void CPU_6502::BCC(uint32_t& Cycles, Byte Offset) {
@@ -48,6 +48,7 @@ void CPU_6502::BCS(uint32_t& Cycles, Byte Offset) {
  }
 }
 
+
 void CPU_6502::BEQ(uint32_t& Cycles, Byte Offset) {
  if (Flag.Z) {
   Word targetAddress = (PC + Offset) & 0xFFFF;
@@ -62,8 +63,8 @@ void CPU_6502::BEQ(uint32_t& Cycles, Byte Offset) {
 void CPU_6502::BIT(Byte M) {
  Byte Mask = A & M;
  Flag.Z    = (Mask == 0);
- Flag.N    = (Mask & 0x80);
- Flag.O    = (Mask & 0x80);
+ Flag.N    = (Mask & 0x80) != 0;
+ Flag.O    = (Mask & 0x80) != 0;
 }
 
 void CPU_6502::BMI(uint32_t& Cycles, Byte Offset) {
@@ -157,35 +158,35 @@ void CPU_6502::CMP(Byte M) {
  Byte Result = A - M;
  Flag.C      = (A >= M);
  Flag.Z      = (Result == 0);
- Flag.N      = (Result & 0x80);
+ Flag.N      = (Result & 0x80) != 0;
 }
 
 void CPU_6502::CPX(Byte M) {
  Byte Result = X - M;
  Flag.C      = (X >= M);
  Flag.Z      = (Result == 0);
- Flag.N      = (Result & 0x80);
+ Flag.N      = (Result & 0x80) != 0;
 }
 
 void CPU_6502::CPY(Byte M) {
  Byte Result = Y - M;
  Flag.C      = (Y >= M);
  Flag.Z      = (Result == 0);
- Flag.N      = (Result & 0x80);
+ Flag.N      = (Result & 0x80) != 0;
 }
 
 void CPU_6502::DEC(Byte& Dest) {
  if (Dest)
   Dest--;
  Flag.Z = (Dest == 0);
- Flag.N = (Dest & 0x80);
+ Flag.N = (Dest & 0x80) != 0;
 }
 
 void CPU_6502::DEX(uint32_t& Cycles) {
  if (X)
   X--;
  Flag.Z = (X == 0);
- Flag.N = (X & 0x80);
+ Flag.N = (X & 0x80) != 0;
  EatCycles(Cycles, 1);
 }
 
@@ -193,32 +194,32 @@ void CPU_6502::DEY(uint32_t& Cycles) {
  if (Y)
   Y--;
  Flag.Z = (Y == 0);
- Flag.N = (Y & 0x80);
+ Flag.N = (Y & 0x80) != 0;
  EatCycles(Cycles, 1);
 }
 
 void CPU_6502::EOR(Byte M) {
  A ^= M;
  Flag.Z = (A == 0);
- Flag.N = (A & 0x80);
+ Flag.N = (A & 0x80) != 0;
 }
 
 void CPU_6502::INC(Byte& Dest) {
  Dest++;
  Flag.Z = (Dest == 0);
- Flag.N = (Dest & 0x80);
+ Flag.N = (Dest & 0x80) != 0;
 }
 
 void CPU_6502::INX(uint32_t& Cycles) {
  X++;
  Flag.Z = (X == 0);
- Flag.N = (X & 0x80);
+ Flag.N = (X & 0x80) != 0;
 }
 
 void CPU_6502::INY(uint32_t& Cycles) {
  Y++;
  Flag.Z = (Y == 0);
- Flag.N = (Y & 0x80);
+ Flag.N = (Y & 0x80) != 0;
 }
 
 void CPU_6502::JMP(Word Address) { PC = Address; }
@@ -237,10 +238,10 @@ void CPU_6502::LDY(Byte M) { Y = M; }
 
 void CPU_6502::LSR(uint32_t& Cycles, Byte& Dest) {
  EatCycles(Cycles, 1);
- Flag.C = (Dest & 0x80);
+ Flag.C = (Dest & 0x80) != 0;
  Dest >>= 1;
  Flag.Z = (Dest == 0);
- Flag.N = (Dest & 0x80);
+ Flag.N = (Dest & 0x80) != 0;
 }
 
 void CPU_6502::NOP(uint32_t& Cycles) { EatCycles(Cycles, 1); }
@@ -248,7 +249,7 @@ void CPU_6502::NOP(uint32_t& Cycles) { EatCycles(Cycles, 1); }
 void CPU_6502::ORA(Byte M) {
  A      = A | M;
  Flag.Z = (A == 0);
- Flag.N = (A & 0x80);
+ Flag.N = (A & 0x80) != 0;
 }
 
 void CPU_6502::PHA(uint32_t& Cycles, Memory& memory) {
@@ -282,7 +283,7 @@ void CPU_6502::ROL(uint32_t& Cycles, Byte& Dest) {
  else
   Dest &= ~0x01;
  Flag.Z = (Dest == 0);
- Flag.N = (Dest & 0x80);
+ Flag.N = (Dest & 0x80) != 0;
  EatCycles(Cycles, 1);
 }
 
@@ -296,7 +297,7 @@ void CPU_6502::ROR(uint32_t& Cycles, Byte& Dest) {
  else
   Dest &= ~0x01;
  Flag.Z = (Dest == 0);
- Flag.N = (Dest & 0x80);
+ Flag.N = (Dest & 0x80) != 0;
  EatCycles(Cycles, 1);
 }
 
@@ -324,7 +325,7 @@ void CPU_6502::SBC(Byte M) {
  printf("Res: 0x%04x ", Sub);
 
  Flag.Z   = (A == 0);
- Flag.N   = (A & 0x80);
+ Flag.N   = (A & 0x80) != 0;
  Flag.O   = (((A ^ M) & (A ^ (Byte)Sub)) & 0x80) != 0;
 }
 

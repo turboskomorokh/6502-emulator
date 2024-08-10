@@ -190,8 +190,6 @@ void CPU_6502::WriteValueToAddress(uint32_t Cycles, Memory& memory, Word Address
 
 void CPU_6502::Execute(uint32_t Cycles, Memory& memory) {
  Word Last_PC     = PC;
- Byte Stuck_Check = 0;
- printf("0x%04x\n", PC);
  PC = ReadWord(Cycles, PC, memory);
  while (Cycles > 0) {
   printf("PC 0x%04x; ", PC);
@@ -199,11 +197,8 @@ void CPU_6502::Execute(uint32_t Cycles, Memory& memory) {
   printf("Instruction: 0x%02x. ", Ins);
 
   if (PC == Last_PC) {
-   Stuck_Check++;
-   if (Stuck_Check > 2) {
     printf("Program counter stuck at 0x%04x\n", Last_PC);
     break;
-   }
   }
 
   Last_PC = PC;
