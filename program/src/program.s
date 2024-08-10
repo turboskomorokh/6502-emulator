@@ -1,5 +1,5 @@
 .fopt	author, "Paul Goldstein"
-.fopt	epoch, ""
+.fopt	epoch, "1723251405"
 .fopt	name, "It counts to 10!"
 .setcpu  "6502"
 
