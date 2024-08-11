@@ -1,6 +1,8 @@
 emulator
 program.bin
 
+*.save
+
 # Prerequisites
 *.d
 

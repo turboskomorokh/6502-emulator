@@ -20,17 +20,17 @@ void Memory::Read(std::fstream& program) {
 }
 
 void Memory::PrintRange(Word addr, Word end) {
-    printf("\nMemory dump 0x%04x-0x%04x:\n", addr, end);
+ printf("\nMemory dump 0x%04x-0x%04x:\n", addr, end);
 
-    for (size_t i = addr; i < end; i += 8) {
-        printf("0x%04zx ", i);
-        for (size_t j = 0; j < 8; ++j) {
-            if (i + j <= end) {
-                printf("0x%02x ", Data[i + j]);
-            } else {
-                printf("   ");
-            }
-        }
-        printf("\n");
-    }
+ for (size_t i = addr; i < end; i += 8) {
+  printf("0x%04zx ", i);
+  for (size_t j = 0; j < 8; ++j) {
+   if (i + j <= end) {
+    printf("0x%02x ", Data[i + j]);
+   } else {
+    printf("   ");
+   }
+  }
+  printf("\n");
+ }
 }

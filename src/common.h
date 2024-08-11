@@ -4,7 +4,5 @@
 typedef unsigned short Word;
 typedef unsigned char  Byte;
 
-
-
 #endif
 
