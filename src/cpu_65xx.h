@@ -19,7 +19,20 @@ struct CPU_65XX_SREG {
  Byte GetSREG() const;
  void SetSREG(Byte SREG);
 
+ enum BITS {
+  ZeroBit             = 0x01,
+  CarryBit            = 0x02,
+  InterruptDisableBit = 0x04,
+  BreakBit            = 0x10,
+  UnusedBit           = 0x20,
+  OverflowBit         = 0x40,
+  NegativeBit         = 0x80,
+ };
+
+ void setZeroNegativeFlags(Byte Reg);
+
  operator Byte() const { return GetSREG(); }
+
  CPU_65XX_SREG& operator=(Byte SREG) {
   SetSREG(SREG);
   return *this;
@@ -50,8 +63,8 @@ struct CPU_65XX {
 
  void StackPushByte(Memory& Memory, Byte M);
  void StackPushWord(Memory& Memory, Word M);
- Byte StackPullByte(Memory& Memory);
- Word StackPullWord(Memory& Memory);
+ Byte StackPopByte(Memory& Memory);
+ Word StackPopWord(Memory& Memory);
 
  // Memory operations
 
@@ -258,94 +271,98 @@ struct CPU_65XX {
      INS_NOP_IMPL = 0xEA, //    1       2
      INS_RTI_IMPL = 0x40; //    1       6
 
- // Internal cycles: 0
- void ADC(Byte M);
- // Internal cycles: 0
- void AND(Byte M);
- // Internal cycles: 1
- void ASL(Byte& Dest);
- // Internal cycles: 3
- void BCC(Byte Offset);
- // Internal cycles: 3
- void BCS(Byte Offset);
- // Internal cycles: 3
- void BEQ(Byte Offset);
- // Internal cycles: 0
- void BIT(Byte M);
- // Internal cycles: 3
- void BMI(Byte Offset);
- // Internal cycles: 3
- void BNE(Byte Offset);
- // Internal cycles: 3
- void BPL(Byte Offset);
- // Internal cycles: 5
+ 
+ void ADC(Byte Operand);
+ 
+ void AND(Byte Operand);
+ 
+ void ASL(Byte& Operand);
+
+ void BranchIf(Memory& Memory, bool Value, bool Needed);
+ 
+ void BCC(Memory& Memory);
+ 
+ void BCS(Memory& Memory);
+ 
+ void BEQ(Memory& Memory);
+ 
+ void BIT(Memory& Memory, Word Address);
+ 
+ void BMI(Memory& Memory);
+ 
+ void BNE(Memory& Memory);
+ 
+ void BPL(Memory& Memory);
+ 
  void BRK(Memory& memory);
- // Internal cycles: 3
- void BVC(Byte Offset);
- // Internal cycles: 3
- void BVS(Byte Offset);
- // Internal cycles: 1
+ 
+ void BVC(Memory& Memory);
+ 
+ void BVS(Memory& Memory);
+ 
  void CLC();
- // Internal cycles: 1
+ 
  void CLD();
- // Internal cycles: 1
+ 
  void CLI();
- // Internal cycles: 1
+ 
  void CLV();
- // Internal cycles: 0
- void CMP(Byte M);
- // Internal cycles: 0
- void CPX(Byte M);
- // Internal cycles: 0
- void CPY(Byte M);
- // Internal cycles: 0
- void DEC(Byte& Dest);
- // Internal cycles: 1
+ 
+ void CMP(Byte Operand);
+ 
+ void CPX(Byte Operand);
+ 
+ void CPY(Byte Operand);
+ 
+ void DEC(Byte& Operand);
+ 
  void DEX();
- // Internal cycles: 1
+ 
  void DEY();
- // Internal cycles: 0
- void EOR(Byte M);
- // Internal cycles: 0
- void INC(Byte& Dest);
- // Internal cycles: 1
+ 
+ void EOR(Memory& Memory, Word Address);
+ 
+ void INC(Byte& Operand);
+ 
  void INX();
- // Internal cycles: 1
+ 
  void INY();
- // Internal cycles: 0
+ 
  void JMP(Word Address);
- // Internal cycles: 2
+ 
  void JSR(Memory& memory, Word Address);
- // Internal cycles: 0
- void LDA(Byte M);
- // Internal cycles: 0
- void LDX(Byte M);
- // Internal cycles: 0
- void LDY(Byte M);
- // Internal cycles: 1
+ 
+ void LoadReg(Byte& Register, Byte Value);
+ 
+ void LDA(Byte Operand);
+ 
+ void LDX(Byte Operand);
+ 
+ void LDY(Byte Operand);
+ 
  void LSR(Byte& Dest);
- // Internal cycles: 1
+ 
  void NOP();
- // Internal cycles: 0
- void ORA(Byte M);
- // Internal cycles: 2
+ 
+ void ORA(Byte Operand);
+ 
  void PHA(Memory& memory);
- // Internal cycles: 2
+ 
  void PHP(Memory& memory);
- // Internal cycles: 3
+ 
  void PLA(Memory& memory);
- // Internal cycles: 3
+ 
  void PLP(Memory& memory);
- // Internal cycles: 1
- void ROL(Byte& Dest);
- // Internal cycles: 1
- void ROR(Byte& Dest);
- // Internal cycles: 5
+ 
+ void ROL(Byte& Operand);
+ 
+ void ROR(Byte& Operand);
+ 
  void RTI(Memory& memory);
- // Internal cycles: 5
+ 
  void RTS(Memory& memory);
- // Internal cycles: 0
- void SBC(Byte M);
+ 
+ void SBC(Byte Operand);
  void SEC();
  void SED();
  void SEI();

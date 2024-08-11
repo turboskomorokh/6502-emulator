@@ -24,24 +24,24 @@ void CPU_65XX::ShowRegisters() {
 
 Byte CPU_65XX_SREG::GetSREG() const {
  Byte SREG = 0;
- SREG |= (C ? 0x01 : 0x00);
- SREG |= (Z ? 0x02 : 0x00);
- SREG |= (I ? 0x04 : 0x00);
- SREG |= (D ? 0x08 : 0x00);
- SREG |= (B ? 0x10 : 0x00);
- SREG |= (O ? 0x40 : 0x00);
- SREG |= (N ? 0x80 : 0x00);
+ SREG |= (Z ? ZeroBit             : 0x00);
+ SREG |= (C ? CarryBit            : 0x00);
+ SREG |= (I ? InterruptDisableBit : 0x00);
+ SREG |= (B ? BreakBit            : 0x00);
+ SREG |= (D ? UnusedBit           : 0x00);
+ SREG |= (O ? OverflowBit         : 0x00);
+ SREG |= (N ? NegativeBit         : 0x00);
  return SREG;
 }
 
 void CPU_65XX_SREG::SetSREG(Byte SREG) {
- C = (SREG & 0x01);
- Z = (SREG & 0x02);
- I = (SREG & 0x04);
- D = (SREG & 0x08);
- B = (SREG & 0x10);
- O = (SREG & 0x20);
- N = (SREG & 0x80);
+ Z = (SREG & ZeroBit);
+ C = (SREG & CarryBit);
+ I = (SREG & InterruptDisableBit);
+ B = (SREG & BreakBit);
+ D = (SREG & UnusedBit);
+ O = (SREG & OverflowBit);
+ N = (SREG & NegativeBit);
 }
 
 void CPU_65XX::Reset(Memory& mem) {
@@ -73,7 +73,7 @@ void CPU_65XX::StackPushWord(Memory& Memory, Word M) {
 }
 
 // Cycles: 1
-Byte CPU_65XX::StackPullByte(Memory& Memory) {
+Byte CPU_65XX::StackPopByte(Memory& Memory) {
  EatCycles(1);
  Byte M = Memory[0x100 + SP];
  SP++;
@@ -81,9 +81,9 @@ Byte CPU_65XX::StackPullByte(Memory& Memory) {
 }
 
 // Cycles: 2
-Word CPU_65XX::StackPullWord(Memory& Memory) {
- Byte hi = StackPullByte(Memory);
- Byte lo = StackPullByte(Memory);
+Word CPU_65XX::StackPopWord(Memory& Memory) {
+ Byte hi = StackPopByte(Memory);
+ Byte lo = StackPopByte(Memory);
  Word M  = (hi << 8) | lo;
  return M;
 }
@@ -132,7 +132,7 @@ void CPU_65XX::WriteByte(Memory& memory, Word Address, Byte M) {
 // Cycles: 2
 void CPU_65XX::WriteWord(Memory& memory, Word Address, Word M) {
  WriteByte(memory, Address, M & 0xFF);
- WriteByte(memory, Address+1, M >> 8);
+ WriteByte(memory, Address + 1, M >> 8);
 }
 
 // Cycles: 1 (+1 on Offset)
@@ -175,5 +175,3 @@ Word CPU_65XX::FetchINAddressY(Memory& memory) {
 
  return EffectiveAddress;
 }
-
-

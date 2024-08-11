@@ -86,64 +86,64 @@ void CPU_6502::Execute(Memory& memory) {
 
   // Cycles: 1
   case INS_AND_IM: {
-   Byte Value = FetchByte(memory);
-   AND(Value);
+   Byte Address = FetchByte(memory);
+   AND(Address);
    printf("Handled INS_AND_IM\n");
   } break;
 
   // Cycles: 2
   case INS_AND_ZP: {
    Byte Address = FetchZPAddress(memory);
-   Byte Value   = ReadByte(Address, memory);
-   AND(Value);
+   Byte Operand = ReadByte(Address, memory);
+   AND(Operand);
    printf("Handled INS_AND_ZP\n");
   } break;
 
   // Cycles: 3
   case INS_AND_ZPX: {
    Byte Address = FetchZPAddress(memory, X);
-   Byte Value   = ReadByte(Address, memory);
-   AND(Value);
+   Byte Operand = ReadByte(Address, memory);
+   AND(Operand);
    printf("Handled INS_AND_ZPX\n");
   } break;
 
   // Cycles: 3
   case INS_AND_AB: {
    Word Address = FetchABAddress(memory);
-   Byte Value   = ReadByte(Address, memory);
-   AND(Value);
+   Byte Operand = ReadByte(Address, memory);
+   AND(Operand);
    printf("Handled INS_AND_AB\n");
   } break;
 
   // Cycles: 3 (+1 if crossing page)
   case INS_AND_ABX: {
    Word Address = FetchABAddress(memory, X);
-   Byte Value   = ReadByte(Address, memory);
-   AND(Value);
+   Byte Operand = ReadByte(Address, memory);
+   AND(Operand);
    printf("Handled INS_AND_ABX\n");
   } break;
 
   // Cycles: 3 (+1 if crossing page)
   case INS_AND_ABY: {
    Word Address = FetchABAddress(memory, Y);
-   Byte Value   = ReadByte(Address, memory);
-   AND(Value);
+   Byte Operand = ReadByte(Address, memory);
+   AND(Operand);
    printf("Handled INS_AND_ABY\n");
   } break;
 
   // Cycles: 5
   case INS_AND_INX: {
    Word Address = FetchINAddressX(memory);
-   Byte Value   = ReadByte(Address, memory);
-   AND(Value);
+   Byte Operand = ReadByte(Address, memory);
+   AND(Operand);
    printf("Handled INS_AND_INX\n");
   } break;
 
   // Cycles: 4 (+1 if crossing page)
   case INS_AND_INY: {
    Word Address = FetchINAddressY(memory);
-   Byte Value   = ReadByte(Address, memory);
-   AND(Value);
+   Byte Operand = ReadByte(Address, memory);
+   AND(Operand);
    printf("Handled INS_AND_INY\n");
   } break;
 
@@ -191,58 +191,51 @@ void CPU_6502::Execute(Memory& memory) {
 
   // Cycles: 1 (+1 if succeed, + 2 if crossed page)
   case INS_BCC_REL: {
-   Byte Offset = FetchByte(memory);
-   BCC(Offset);
+   BCC(memory);
    printf("Handled INS_BCC_REL\n");
   } break;
 
   // Cycles: 1 (+1 if succeed, + 2 if crossed page)
   case INS_BCS_REL: {
-   Byte Offset = FetchByte(memory);
-   BCS(Offset);
+   BCS(memory);
    printf("Handled INS_BCS_REL\n");
   } break;
 
   // Cycles: 1 (+1 if succeed, + 2 if crossed page)
   case INS_BEQ_REL: {
-   Byte Offset = FetchByte(memory);
-   BEQ(Offset);
+   BEQ(memory);
    printf("Handled INS_BEQ_REL\n");
   } break;
 
   // Cycles: 2
   case INS_BIT_ZP: {
    Byte Address = FetchZPAddress(memory);
-   Byte Value   = ReadByte(Address, memory);
-   BIT(Value);
+   BIT(memory, Address);
    printf("Handled INS_BIT_ZP\n");
   } break;
 
   // Cycles: 3
   case INS_BIT_AB: {
    Word Address = FetchABAddress(memory);
-   Byte Value   = ReadByte(Address, memory);
+   BIT(memory, Address);
    printf("Handled INS_BIT_AB\n");
   } break;
 
   // Cycles: 1 (+1 if succeed, + 2 if crossed page)
   case INS_BMI_REL: {
-   Byte Offset = FetchByte(memory);
-   BMI(Offset);
+   BMI(memory);
    printf("Handled INS_BMI_REL\n");
   } break;
 
   // Cycles: 1 (+1 if succeed, + 2 if crossed page)
   case INS_BNE_REL: {
-   Byte Offset = FetchByte(memory);
-   BNE(Offset);
+   BNE(memory);
    printf("Handled INS_BNE_REL\n");
   } break;
 
   // Cycles: 1 (+1 if succeed, + 2 if crossed page)
   case INS_BPL_REL: {
-   Byte Offset = FetchByte(memory);
-   BPL(Offset);
+   BPL(memory);
    printf("Handled INS_BPL_REL\n");
   } break;
 
@@ -254,15 +247,13 @@ void CPU_6502::Execute(Memory& memory) {
 
   // Cycles: 1 (+1 if succeed, + 2 if crossed page)
   case INS_BVC_REL: {
-   Byte Offset = FetchByte(memory);
-   BVC(Offset);
+   BVC(memory);
    printf("Handled INS_BVC_REL\n");
   } break;
 
   // Cycles: 1 (+1 if succeed, + 2 if crossed page)
   case INS_BVS_REL: {
-   Byte Offset = FetchByte(memory);
-   BVS(Offset);
+   BVS(memory);
    printf("Handled INS_BVS_REL\n");
   } break;
 
@@ -449,64 +440,56 @@ void CPU_6502::Execute(Memory& memory) {
 
   // Cycles: 1
   case INS_EOR_IM: {
-   Byte Value = FetchByte(memory);
-   EOR(Value);
+   EOR(memory, PC);
    printf("Handled INS_EOR_IM\n");
   } break;
 
   // Cycles: 2
   case INS_EOR_ZP: {
    Byte Address = FetchZPAddress(memory);
-   Byte Value   = ReadByte(Address, memory);
-   EOR(Value);
+   EOR(memory, Address);
    printf("Handled INS_EOR_ZP\n");
   } break;
 
   // Cycles: 3
   case INS_EOR_ZPX: {
    Byte Address = FetchZPAddress(memory, X);
-   Byte Value   = ReadByte(Address, memory);
-   EOR(Value);
+   EOR(memory, Address);
    printf("Handled INS_EOR_ZPX\n");
   } break;
 
   // Cycles: 3
   case INS_EOR_AB: {
    Word Address = FetchABAddress(memory);
-   Byte Value   = ReadByte(Address, memory);
-   EOR(Value);
+   EOR(memory, Address);
    printf("Handled INS_EOR_AB\n");
   } break;
 
   // Cycles: 3
   case INS_EOR_ABX: {
    Word Address = FetchABAddress(memory, X);
-   Byte Value   = ReadByte(Address, memory);
-   EOR(Value);
+   EOR(memory, Address);
    printf("Handled INS_EOR_ABX\n");
   } break;
 
   // Cycles: 3
   case INS_EOR_ABY: {
    Word Address = FetchABAddress(memory, Y);
-   Byte Value   = ReadByte(Address, memory);
-   EOR(Value);
+   EOR(memory, Address);
    printf("Handled INS_EOR_ABY\n");
   } break;
 
   // Cycles: 5
   case INS_EOR_INX: {
    Word Address = FetchINAddressX(memory);
-   Byte Value   = ReadByte(Address, memory);
-   EOR(Value);
+   EOR(memory, Address);
    printf("Handled INS_EOR_INX\n");
   } break;
 
   // Cycles: 4 (+1 if crossed page)
   case INS_EOR_INY: {
    Word Address = FetchINAddressY(memory);
-   Byte Value   = ReadByte(Address, memory);
-   EOR(Value);
+   EOR(memory, Address);
    printf("Handled INS_EOR_INY\n");
   } break;
 

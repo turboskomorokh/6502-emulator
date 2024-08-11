@@ -13,11 +13,15 @@ int main(int argc, char **argv) {
  Memory mem;
  CPU_6502 cpu;
  cpu.Reset(mem);
- 
+
+ if(argv[2])
+  cpu.Cycles = std::stoi((std::string)argv[2]);
+ else
+  cpu.Cycles = 1000;
  fstream program(argv[1], ios::binary | ios::in);
  mem.Read(program);
 
- cpu.Cycles = std::stoi((std::string)argv[2]);
+ 
 
  cpu.Execute(mem);
  mem.PrintRange(0x0100, 0x0200);

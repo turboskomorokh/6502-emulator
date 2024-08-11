@@ -6,16 +6,12 @@
 
 .segment "CODE"
 
-START:
-	JSR INX10 ;
-	STA $2000 ; Store result
+	SEC
 	LDA #0
-	BRK       ; Finish
+    SBC #0
+    BRK
 
-INX10:
-	CLC
-	ADC #10   ;
-	RTS
+
 .segment "RESETVEC"
     .word $FF00 ; NMI vector location
     .word $8000 ; Reset vector location
