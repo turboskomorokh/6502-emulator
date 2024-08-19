@@ -1,31 +1,21 @@
-#include <cstdint>
-#include <fstream>
-#include <stdint.h>
-
-#include "common.h"
 #include "memory.h"
 
+#include <cstdlib>
+
+#include "common.h"
+
 void Memory::Init() {
- for (uint32_t i = 0; i < MAX_MEM; i++) {
+ for (Word i; i < MAX_MEM - 1; i++) {
   Data[i] = 0;
  }
 }
+void Memory::PrintRange(Word Begin, Word End) {
+ printf("\nMemory dump 0x%04x-0x%04x:\n", Begin, End);
 
-void Memory::Read(std::fstream& program) {
- char ch;
- uint32_t Addr = 0;
- while (Addr < MAX_MEM && program.get(ch)) {
-  Data[Addr++] = ch;
- }
-}
-
-void Memory::PrintRange(Word addr, Word end) {
- printf("\nMemory dump 0x%04x-0x%04x:\n", addr, end);
-
- for (size_t i = addr; i < end; i += 8) {
+ for (size_t i = Begin; i < End; i += 16) {
   printf("0x%04zx ", i);
-  for (size_t j = 0; j < 8; ++j) {
-   if (i + j <= end) {
+  for (size_t j = 0; j < 16; j++) {
+   if (i + j < End) {
     printf("0x%02x ", Data[i + j]);
    } else {
     printf("   ");
@@ -33,4 +23,14 @@ void Memory::PrintRange(Word addr, Word end) {
   }
   printf("\n");
  }
+}
+
+bool Memory::ReadProgram(std::ifstream& Binary, Word StartAddress, Word EndAddress) {
+ if (!Binary.is_open()) return EXIT_FAILURE;
+ char buf;
+ for (Word Address = StartAddress; Address <= EndAddress; Address++) {
+  if (!Binary.get(buf)) break;
+  Data[Address] = buf;
+ }
+ return EXIT_SUCCESS;
 }

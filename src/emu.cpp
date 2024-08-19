@@ -1,35 +1,50 @@
+#include <chrono>
+#include <cstdio>
 #include <fstream>
-#include <string>
+#include <sys/types.h>
+#include <thread>
 
-#include "memory.h"
+#include "common.h"
 #include "cpu_6502.h"
+#include "parser.h"
 
-using std::fstream, std::ios;
+int32_t workCycles = 1000;
+uint32_t startPC   = 0x8000;
+uint32_t tickSpeed = 0;
 
-int main(int argc, char **argv) {
-  if(!argv[1]) {
-    printf("Usage: emulator [binary file] [cycles]");
-  }
- Memory mem;
+std::string binPath = "program.bin";
+
+int main(int argc, char** argv) {
  CPU_6502 cpu;
+ Memory mem;
+
+ if (!argv[1]) {
+  printf("Usage: emulator [program] [Cycles]\n");
+  return 1;
+ }
  cpu.Reset(mem);
 
- if(argv[2])
-  cpu.Cycles = std::stoi((std::string)argv[2]);
- else
-  cpu.Cycles = 1000;
- fstream program(argv[1], ios::binary | ios::in);
- mem.Read(program);
+ parseArgs(argv);
+ printf("%s\n", binPath.c_str());
 
- 
 
- cpu.Execute(mem);
- mem.PrintRange(0x0100, 0x0200);
- mem.PrintRange(0x2000, 0x2020);
- mem.PrintRange(0x8000, 0x8020);
- mem.PrintRange(0xFFFA, 0xFFFF);
- 
- cpu.ShowFlags();
- cpu.ShowRegisters();
- return 0;
+ std::ifstream binFile(binPath, std::ios::binary);
+ mem.ReadProgram(binFile, 0x0, 0xFFFF);
+ binFile.close();
+
+ cpu.PC = startPC;
+
+ Word loop;
+ for (; workCycles > 0; workCycles--) {
+  //  Word OldPc = cpu.PC;
+  cpu.Execute(1, mem);
+
+  // Check PC loop
+  //   if (OldPc == cpu.PC)
+  //    loop++;
+  //   if (loop > 5)
+  //    break;
+
+  std::this_thread::sleep_for(std::chrono::nanoseconds(tickSpeed));
+ }
 }

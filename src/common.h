@@ -1,8 +1,16 @@
-#ifndef _6502_COMMON_H_
-#define _6502_COMMON_H_
+#ifndef _COMMON_H_
+#define _COMMON_H_
 
+#include <string>
+#include <cstdint>
+
+typedef char SignByte;
+typedef unsigned char Byte;
 typedef unsigned short Word;
-typedef unsigned char  Byte;
+
+extern uint32_t tickSpeed;
+extern uint32_t startPC;
+extern int32_t workCycles;
+extern std::string binPath;
 
 #endif
-

@@ -1,374 +1,154 @@
-#ifndef _CPU_65XX_H_
-#define _CPU_65XX_H_
+#ifndef _CPU_65xx_H_
+#define _CPU_65xx_H_
 
 #include <cstdint>
 
 #include "common.h"
-
+#include "ins_65xx.h"
 #include "memory.h"
 
-struct CPU_65XX_SREG {
- Byte C : 1; // Carry
- Byte Z : 1; // Zero
- Byte I : 1; // Interrupt Disable
- Byte D : 1; // Decimal mode
- Byte B : 1; // Break command
- Byte O : 1; // Overflow
- Byte N : 1; // Negative
+// CPU PROGRAM COUNTER STUFF
 
- Byte GetSREG() const;
- void SetSREG(Byte SREG);
+struct CPU_65XX_PS {
+ Byte C : 1;  // Carry
+ Byte Z : 1;  // Zero
+ Byte I : 1;  // Interrupt
+ Byte D : 1;  // Decimal
+ Byte B : 1;  // Break
+ Byte U : 1;  // Unused
+ Byte V : 1;  // oVerflow
+ Byte N : 1;  // Negative
 
- enum BITS {
-  ZeroBit             = 0x01,
-  CarryBit            = 0x02,
-  InterruptDisableBit = 0x04,
-  BreakBit            = 0x10,
-  UnusedBit           = 0x20,
-  OverflowBit         = 0x40,
-  NegativeBit         = 0x80,
- };
+ CPU_65XX_PS() : C(0), Z(0), I(0), D(0), B(0), U(0), V(0), N(0) {}
 
- void setZeroNegativeFlags(Byte Reg);
+ static const Byte CarryBit = 0x01, ZeroBit = 0x02, InterruptDisableBit = 0x04, DecimalBit = 0x08, BreakBit = 0x10, UnusedBit = 0x20, OverflowBit = 0x40, NegativeBit = 0x80;
 
- operator Byte() const { return GetSREG(); }
+ void SetPS(Byte NewPS) {
+  C = (NewPS & CarryBit) ? 1 : 0;
+  Z = (NewPS & ZeroBit) ? 1 : 0;
+  I = (NewPS & InterruptDisableBit) ? 1 : 0;
+  D = (NewPS & DecimalBit) ? 1 : 0;
+  B = (NewPS & BreakBit) ? 1 : 0;
+  U = (NewPS & UnusedBit) ? 1 : 0;
+  V = (NewPS & OverflowBit) ? 1 : 0;
+  N = (NewPS & NegativeBit) ? 1 : 0;
+ }
+ const Byte GetPS() {
+  Byte PS = 0;
+  if (C) PS |= CarryBit;
+  if (Z) PS |= ZeroBit;
+  if (I) PS |= InterruptDisableBit;
+  if (D) PS |= DecimalBit;
+  if (B) PS |= BreakBit;
+  if (U) PS |= UnusedBit;
+  if (V) PS |= OverflowBit;
+  if (N) PS |= NegativeBit;
 
- CPU_65XX_SREG& operator=(Byte SREG) {
-  SetSREG(SREG);
+  return PS;
+ }
+
+ CPU_65XX_PS& operator=(const Byte PS) {
+  SetPS(PS);
   return *this;
  }
+
+ operator Byte() { return GetPS(); }
 };
 
+// CPU
+
 struct CPU_65XX {
- Word PC; // Program Counter
- Byte SP; // Stack Pointer
+public:
+ Word PC;  // Program counter
+ Byte SP;  // Stack pointer (in range 0x00-0xFF)
 
- CPU_65XX_SREG SREG; // Status Register
+ Byte A;  // Accumulator
+ Byte X;  // X Register
+ Byte Y;  // Y Register
 
- Byte A, X, Y; // Registers: Accumulator, X, Y
+ int32_t Cycles;
 
- uint32_t Cycles = 0; // Cycles
+ struct CPU_65XX_PS PS;  // Processor status
 
- // Verbose functions
- void ShowRegisters();
- void ShowFlags();
-
- // Main functions
  void Reset(Memory& mem);
- void Execute(Memory& memory);
+ int32_t EatCycles(int32_t amount);
 
- void EatCycles(uint32_t amount);
+ Byte FetchByte(Memory& mem);
+ Word FetchWord(Memory& mem);
 
- // Stack operations
+ Byte ReadByte(Memory& mem, Word Address);
+ Word ReadWord(Memory& mem, Word Address);
 
- void StackPushByte(Memory& Memory, Byte M);
- void StackPushWord(Memory& Memory, Word M);
- Byte StackPopByte(Memory& Memory);
- Word StackPopWord(Memory& Memory);
+ void WriteByte(Memory& mem, Word Address, Byte Value);
+ void WriteWord(Memory& mem, Word Address, Word Value);
 
- // Memory operations
+ void StackPushByte(Memory& mem, Byte Value);
+ void StackPushWord(Memory& mem, Word Value);
 
- Byte FetchByte(Memory& Memory);
- Word FetchWord(Memory& Memory);
+ Byte StackPopByte(Memory& mem);
+ Word StackPopWord(Memory& mem);
 
- Byte ReadByte(Word Address, Memory& Memory);
- Word ReadWord(Word Address, Memory& Memory);
-
- void WriteByte(Memory& Memory, Word Address, Byte Value);
- void WriteWord(Memory& Memory, Word Address, Word Value);
-
- Byte FetchZPAddress(Memory& Memory, Byte offset = 0x00);
- Word FetchABAddress(Memory& Memory, Byte Offset = 0x00);
+ Byte FetchZPAddress(Memory& mem, Byte Offset = 0x00);
+ Word FetchABAddress(Memory& mem, Byte Offset = 0x00);
 
  Word FetchINAddressX(Memory& Memory);
  Word FetchINAddressY(Memory& Memory);
 
- static constexpr Byte
-     // LOAD INSTRUCTIONS
-     INS_LDA_IM
-     = 0xA9, //    2       2
-     INS_LDA_ZP   = 0xA5, //    2       3
-     INS_LDA_ZPX  = 0xB5, //    2       4
-     INS_LDA_AB   = 0xAD, //    3       4
-     INS_LDA_ABX  = 0xBD, //    3       4
-     INS_LDA_ABY  = 0xB9, //    3       4
-     INS_LDA_INX  = 0xA1, //    2       6
-     INS_LDA_INY  = 0xB1, //    2       6
+ // private:
+ void SetZeroNegativeFlags(Byte Value);
 
-     INS_LDX_IM   = 0xA2, //    2       2
-     INS_LDX_ZP   = 0xA6, //    2       3
-     INS_LDX_ZPY  = 0xB6, //    2       4
-     INS_LDX_AB   = 0xAE, //    3       4
-     INS_LDX_ABY  = 0xBE, //    3       4
+ void ConditionalBranch(Memory& mem, bool Value, bool Needed);
 
-     INS_LDY_IM   = 0xA0, //    2       2
-     INS_LDY_ZP   = 0xA4, //    2       3
-     INS_LDY_ZPX  = 0xB4, //    2       4
-     INS_LDY_AB   = 0xAC, //    3       4
-     INS_LDY_ABX  = 0xBC, //    3       4
-     // STORE INSTRUCTIONS
-     INS_STA_ZP   = 0x85, //    2       3
-     INS_STA_ZPX  = 0x95, //    2       4
-     INS_STA_AB   = 0x8D, //    3       4
-     INS_STA_ABX  = 0x9D, //    3       5
-     INS_STA_ABY  = 0x99, //    3       5
-     INS_STA_INX  = 0x81, //    2       6
-     INS_STA_INY  = 0x91, //    2       6
-
-     INS_STX_ZP   = 0x86, //    2       3
-     INS_STX_ZPY  = 0x96, //    2       4
-     INS_STX_AB   = 0x8E, //    3       4
-
-     INS_STY_ZP   = 0x84, //    2       3
-     INS_STY_ZPX  = 0x94, //    2       4
-     INS_STY_AB   = 0x8C, //    3       4
-     // TRANSFER INSTRUCTIONS
-     INS_TAX_IMPL = 0xAA, //    1       2
-     INS_TXA_IMPL = 0x8A, //    1       2
-
-     INS_TAY_IMPL = 0xA8, //    1       2
-     INS_TYA_IMPL = 0x98, //    1       2
-     // STACK OPERATIONS INSTRUCTIONS
-     INS_TSX_IMPL = 0xBA, //    1       2
-     INS_TXS_IMPL = 0x9A, //    1       2
-
-     INS_PHA_IMPL = 0x48, //    1       3
-     INS_PHP_IMPL = 0x08, //    1       3
-
-     INS_PLA_IMPL = 0x68, //    1       4
-     INS_PLP_IMPL = 0x28, //    1       4
-     // LOGICAL FUNCTIONS
-     INS_AND_IM   = 0x29, //    2       2
-     INS_AND_ZP   = 0x25, //    2       3
-     INS_AND_ZPX  = 0x35, //    2       4
-     INS_AND_AB   = 0x2D, //    3       4
-     INS_AND_ABX  = 0x3D, //    3       4
-     INS_AND_ABY  = 0x39, //    3       4
-     INS_AND_INX  = 0x21, //    2       6
-     INS_AND_INY  = 0x31, //    2       6
-
-     INS_EOR_IM   = 0x49, //    2       2
-     INS_EOR_ZP   = 0x45, //    2       3
-     INS_EOR_ZPX  = 0x55, //    2       4
-     INS_EOR_AB   = 0x4D, //    3       4
-     INS_EOR_ABX  = 0x5D, //    3       4
-     INS_EOR_ABY  = 0x59, //    3       4
-     INS_EOR_INX  = 0x41, //    2       6
-     INS_EOR_INY  = 0x51, //    2       6
-
-     INS_ORA_IM   = 0x09, //    2       2
-     INS_ORA_ZP   = 0x05, //    2       3
-     INS_ORA_ZPX  = 0x15, //    2       4
-     INS_ORA_AB   = 0x0D, //    3       4
-     INS_ORA_ABX  = 0x1D, //    3       4
-     INS_ORA_ABY  = 0x19, //    3       4
-     INS_ORA_INX  = 0x01, //    2       6
-     INS_ORA_INY  = 0x11, //    2       6
-
-     INS_BIT_ZP   = 0x24, //    2       3
-     INS_BIT_AB   = 0x2C, //    3       4
-     // ARITHMETIC INSTRUCTIONS
-     INS_ADC_IM   = 0x69, //    2       2
-     INS_ADC_ZP   = 0x65, //    2       3
-     INS_ADC_ZPX  = 0x75, //    2       4
-     INS_ADC_AB   = 0x6D, //    3       4
-     INS_ADC_ABX  = 0x7D, //    3       4
-     INS_ADC_ABY  = 0x79, //    3       4
-     INS_ADC_INX  = 0x61, //    2       6
-     INS_ADC_INY  = 0x71, //    2       5
-
-     INS_SBC_IM   = 0xE9, //    2       2
-     INS_SBC_ZP   = 0xE5, //    2       3
-     INS_SBC_ZPX  = 0xF5, //    2       4
-     INS_SBC_AB   = 0xED, //    3       4
-     INS_SBC_ABX  = 0xFD, //    3       4
-     INS_SBC_ABY  = 0xF9, //    3       4
-     INS_SBC_INX  = 0xE1, //    2       6
-     INS_SBC_INY  = 0xF1, //    2       6
-
-     INS_CMP_IM   = 0xC9, //    2       2
-     INS_CMP_ZP   = 0xC5, //    2       3
-     INS_CMP_ZPX  = 0xD5, //    2       4
-     INS_CMP_AB   = 0xCD, //    3       4
-     INS_CMP_ABX  = 0xDD, //    3       4
-     INS_CMP_ABY  = 0xD9, //    3       4
-     INS_CMP_INX  = 0xC1, //    2       6
-     INS_CMP_INY  = 0xD1, //    2       6
-
-     INS_CPX_IM   = 0xE0, //    2       2
-     INS_CPX_ZP   = 0xE4, //    2       3
-     INS_CPX_AB   = 0xEC, //    2       4
-
-     INS_CPY_IM   = 0xC0, //    2       2
-     INS_CPY_ZP   = 0xC4, //    2       3
-     INS_CPY_AB   = 0xCC, //    2       4
-     // INC AND DEC INSTRUCTIONS
-     INS_INC_ZP   = 0xE6, //    2       5
-     INS_INC_ZPX  = 0xF6, //    2       6
-     INS_INC_AB   = 0xEE, //    3       6
-     INS_INC_ABX  = 0xFE, //    3       7
-
-     INS_INX_IMPL = 0xE8, //    1       2
-     INS_INY_IMPL = 0xC8, //    1       2
-
-     INS_DEC_ZP   = 0xC6, //    2       5
-     INS_DEC_ZPX  = 0xD6, //    2       6
-     INS_DEC_AB   = 0xCE, //    3       6
-     INS_DEC_ABX  = 0xDE, //    3       7
-
-     INS_DEX_IMPL = 0xCA, //    1       2
-     INS_DEY_IMPL = 0x88, //    1       2
-     // SHIFT INSTRUCTIONS
-     INS_ASL_A    = 0x0A, //    1       2
-     INS_ASL_ZP   = 0x06, //    2       5
-     INS_ASL_ZPX  = 0x16, //    2       6
-     INS_ASL_AB   = 0x0E, //    3       6
-     INS_ASL_ABX  = 0x1E, //    3       7
-
-     INS_LSR_A    = 0x4A, //    1       2
-     INS_LSR_ZP   = 0x46, //    2       5
-     INS_LSR_ZPX  = 0x56, //    2       6
-     INS_LSR_AB   = 0x4E, //    3       6
-     INS_LSR_ABX  = 0x5E, //    3       7
-
-     INS_ROL_A    = 0x2A, //    1       2
-     INS_ROL_ZP   = 0x26, //    2       5
-     INS_ROL_ZPX  = 0x36, //    2       6
-     INS_ROL_AB   = 0x2E, //    3       6
-     INS_ROL_ABX  = 0x3E, //    3       7
-
-     INS_ROR_A    = 0x6A, //    1       2
-     INS_ROR_ZP   = 0x66, //    2       5
-     INS_ROR_ZPX  = 0x76, //    2       6
-     INS_ROR_AB   = 0x6E, //    3       6
-     INS_ROR_ABX  = 0x7E, //    3       7
-     // JUMPS AND CALL INSTRUCTIONS
-     INS_JMP_AB   = 0x4C, //    3       5
-     // On the holy earth why
-     INS_JMP_IN   = 0x6C, //    3       5
-     INS_JSR_AB   = 0x20, //    3       6
-     INS_RTS_IMPL = 0x60, //    1       6
-     // BRANCH INSTRUCTIONS
-     INS_BCC_REL  = 0x90, //    2       2 (+1 if branch succeeds. +2 if to a new page)
-     INS_BCS_REL  = 0xB0, //    2       2 (+1 if branch succeeds. +2 if to a new page)
-     INS_BEQ_REL  = 0xF0, //    2       2 (+1 if branch succeeds. +2 if to a new page)
-     INS_BMI_REL  = 0x30, //    2       2 (+1 if branch succeeds. +2 if to a new page)
-     INS_BNE_REL  = 0xD0, //    2       2 (+1 if branch succeeds. +2 if to a new page)
-     INS_BPL_REL  = 0x10, //    2       2 (+1 if branch succeeds. +2 if to a new page)
-     INS_BVC_REL  = 0x50, //    2       2 (+1 if branch succeeds. +2 if to a new page)
-     INS_BVS_REL  = 0x70, //    2       2 (+1 if branch succeeds. +2 if to a new page)
-     // STATUS FLAG CHANGES INSTRUCTIONS
-     INS_CLC_IMPL = 0x18, //    1       2
-     INS_CLD_IMPL = 0xD8, //    1       2
-     INS_CLI_IMPL = 0x58, //    1       2
-     INS_CLV_IMPL = 0xB8, //    1       2
-
-     INS_SEC_IMPL = 0x38, //    1       2
-     INS_SED_IMPL = 0xF8, //    1       2
-     INS_SEI_IMPL = 0x78, //    1       2
-     // SYSTEM INSTRUCTIONS
-     INS_BRK_IMPL = 0x00, //    1       7
-     INS_NOP_IMPL = 0xEA, //    1       2
-     INS_RTI_IMPL = 0x40; //    1       6
-
- 
  void ADC(Byte Operand);
- 
  void AND(Byte Operand);
- 
- void ASL(Byte& Operand);
-
- void BranchIf(Memory& Memory, bool Value, bool Needed);
- 
- void BCC(Memory& Memory);
- 
- void BCS(Memory& Memory);
- 
- void BEQ(Memory& Memory);
- 
- void BIT(Memory& Memory, Word Address);
- 
- void BMI(Memory& Memory);
- 
- void BNE(Memory& Memory);
- 
- void BPL(Memory& Memory);
- 
- void BRK(Memory& memory);
- 
- void BVC(Memory& Memory);
- 
- void BVS(Memory& Memory);
- 
+ Byte ASL(Byte Value);
+ void BCC(Memory& mem);
+ void BCS(Memory& mem);
+ void BEQ(Memory& mem);
+ void BIT(Memory& mem, Word Address);
+ void BMI(Memory& mem);
+ void BNE(Memory& mem);
+ void BPL(Memory& mem);
+ void BRK(Memory& mem);
+ void BVC(Memory& mem);
+ void BVS(Memory& mem);
  void CLC();
- 
  void CLD();
- 
  void CLI();
- 
  void CLV();
- 
  void CMP(Byte Operand);
- 
  void CPX(Byte Operand);
- 
  void CPY(Byte Operand);
- 
- void DEC(Byte& Operand);
- 
+ void DEC(Memory& mem, Word Address);
  void DEX();
- 
  void DEY();
- 
- void EOR(Memory& Memory, Word Address);
- 
- void INC(Byte& Operand);
- 
+ void EOR(Byte Value);
+ void INC(Memory& mem, Word Address);
  void INX();
- 
  void INY();
- 
  void JMP(Word Address);
- 
- void JSR(Memory& memory, Word Address);
- 
- void LoadReg(Byte& Register, Byte Value);
- 
- void LDA(Byte Operand);
- 
- void LDX(Byte Operand);
- 
- void LDY(Byte Operand);
- 
- void LSR(Byte& Dest);
- 
+ void JSR(Memory& mem);
+ void LDA(Byte Value);
+ void LDX(Byte Value);
+ void LDY(Byte Value);
+ Byte LSR(Byte Value);
  void NOP();
- 
- void ORA(Byte Operand);
- 
- void PHA(Memory& memory);
- 
- void PHP(Memory& memory);
- 
- void PLA(Memory& memory);
- 
- void PLP(Memory& memory);
- 
- void ROL(Byte& Operand);
- 
- void ROR(Byte& Operand);
- 
- void RTI(Memory& memory);
- 
- void RTS(Memory& memory);
- 
+ void ORA(Byte Value);
+ void PHA(Memory& mem);
+ void PHP(Memory& mem);
+ void PLA(Memory& mem);
+ void PLP(Memory& mem);
+ Byte ROL(Byte Value);
+ Byte ROR(Byte Value);
+ void RTI(Memory& mem);
+ void RTS(Memory& mem);
  void SBC(Byte Operand);
  void SEC();
  void SED();
  void SEI();
- void STA(Memory& memory, Word Address);
- void STX(Memory& memory, Word Address);
- void STY(Memory& memory, Word Address);
+ void STA(Memory& mem, Word Address);
+ void STX(Memory& mem, Word Address);
+ void STY(Memory& mem, Word Address);
  void TAX();
  void TAY();
  void TSX();

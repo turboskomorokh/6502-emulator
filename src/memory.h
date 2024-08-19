@@ -1,8 +1,10 @@
-#ifndef _6502_MEMORY_H_
-#define _6502_MEMORY_H_
+#ifndef _MEMORY_H_
+#define _MEMORY_H_
 
 #include <fstream>
+
 #include <cstdint>
+#include <cstdio>
 
 #include "common.h"
 
@@ -13,12 +15,11 @@ struct Memory {
 
  void Init();
 
- // Read bytes from file to memory struct
- void Read(std::fstream& program);
+ void PrintRange(Word Begin, Word End);
 
- // Verbose function
- void PrintRange(Word addr, Word end);
+ bool ReadProgram(std::ifstream& Binary, Word StartAddress = 0x0, Word EndAddress = MAX_MEM - 1);
 
+ // Memory interface
  Byte operator[](Word Address) const { return Data[Address]; }
  Byte& operator[](Word Address) { return Data[Address]; }
 };

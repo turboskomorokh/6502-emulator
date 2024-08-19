@@ -12,7 +12,7 @@ $(BIN): $(OBJECTS)
 
 %.o: %.cpp
 	@echo "  CPP    $@"
-	@$(CPP) -c $< -o $@
+	@$(CPP) -pg -c $< -o $@
 
 clean:
 	@echo "  RM     $(OBJECTS) $(BIN)"
