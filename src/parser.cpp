@@ -7,7 +7,6 @@ void parseArgs(char** argv) {
   if (*argv[0] != '-')
    continue;
   std::string Argument = *argv, Value = *++argv;
-  printf("%s %s\n", Argument.c_str(), Value.c_str());
   switch (Argument[1]) {
   case 'p':
    startPC = std::stoi((std::string)Value, nullptr, 16);

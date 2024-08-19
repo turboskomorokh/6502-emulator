@@ -25,8 +25,6 @@ int main(int argc, char** argv) {
  cpu.Reset(mem);
 
  parseArgs(argv);
- printf("%s\n", binPath.c_str());
-
 
  std::ifstream binFile(binPath, std::ios::binary);
  mem.ReadProgram(binFile, 0x0, 0xFFFF);
